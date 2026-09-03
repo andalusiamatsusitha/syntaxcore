@@ -1,0 +1,6 @@
+/* SyntaxCore Application Stylesheet (Extends Bootstrap) */
+body {
+    background-color: #f8fafc;
+    color: #1e293b;
+    min-height: 100vh;
+}
