@@ -24,6 +24,7 @@
                 </span>
 
                 <form action="/admin/logout" method="POST" class="d-inline m-0">
+                    <input type="hidden" name="_token" value="<?= htmlspecialchars(\Core\Security\Csrf::token()) ?>">
                     <button type="submit" class="btn btn-outline-light btn-sm">Logout</button>
                 </form>
             </div>

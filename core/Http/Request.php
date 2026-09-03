@@ -80,6 +80,11 @@ class Request
         return $this->method;
     }
 
+    public function getMethod(): string
+    {
+        return $this->method();
+    }
+
     public function isMethod(string $method): bool
     {
         return strtoupper($this->method) === strtoupper($method);

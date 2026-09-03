@@ -27,6 +27,7 @@
             <?php endif; ?>
 
             <form action="/admin/login" method="POST">
+                <input type="hidden" name="_token" value="<?= htmlspecialchars(\Core\Security\Csrf::token()) ?>">
                 <div class="mb-3">
                     <label for="email" class="form-label small fw-semibold">Email Address</label>
                     <input type="email" class="form-control" id="email" name="email"

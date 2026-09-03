@@ -26,6 +26,7 @@ return [
     'aliases' => [
         'auth' => \App\Middleware\Authenticate::class,
         'guest' => \App\Middleware\RedirectIfAuthenticated::class,
+        'csrf' => \App\Middleware\VerifyCsrfToken::class,
     ],
 
     /*
@@ -38,6 +39,8 @@ return [
     |
     */
     'priority' => [
-        //
+        \App\Middleware\VerifyCsrfToken::class,
+        \App\Middleware\Authenticate::class,
+        \App\Middleware\RedirectIfAuthenticated::class,
     ],
 ];

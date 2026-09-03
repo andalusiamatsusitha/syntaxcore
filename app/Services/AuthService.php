@@ -13,14 +13,8 @@ class AuthService
      */
     public function ensureSessionStarted(): void
     {
-        if (session_status() === PHP_SESSION_NONE) {
-            if (!headers_sent()) {
-                @session_start();
-            } else {
-                if (!isset($_SESSION)) {
-                    $_SESSION = [];
-                }
-            }
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            session_start();
         }
     }
 

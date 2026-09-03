@@ -8,8 +8,8 @@
 $baseDir = dirname(__DIR__);
 require_once $baseDir . '/vendor/autoload.php';
 
-if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
-    @session_start();
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
 }
 
 class TestRunner
@@ -325,14 +325,26 @@ $t->test('Sort direction allowlist only accepts ASC or DESC', function ($t) {
     });
 });
 
-$t->test('Fillable protects mass-assignment', function ($t) {
-    $userModel = new class(['name' => 'John', 'role' => 'admin']) extends \Core\Database\Model {
+$t->test('Fillable protects mass-assignment and rejects unfillable input', function ($t) {
+    $userModel = new class(['name' => 'John', 'role' => 'admin', 'id' => 999]) extends \Core\Database\Model {
         protected array $fillable = ['name'];
     };
 
     $attrs = $userModel->toArray();
     $t->assertEquals('John', $attrs['name'] ?? null);
-    $t->assert(!isset($attrs['role']), 'Unfillable attribute role must be filtered out');
+    $t->assert(!isset($attrs['role']), 'Unfillable attribute role must be filtered out by fill()');
+    $t->assert(!isset($attrs['id']), 'Unfillable attribute id must be filtered out by fill()');
+});
+
+$t->test('forceFill intentionally bypasses fillable for trusted database hydration', function ($t) {
+    $model = new class extends \Core\Database\Model {
+        protected array $fillable = ['name'];
+    };
+
+    $model->forceFill(['id' => 42, 'name' => 'Admin', 'role' => 'superadmin']);
+    $t->assertEquals(42, $model->id);
+    $t->assertEquals('Admin', $model->name);
+    $t->assertEquals('superadmin', $model->role);
 });
 
 // ==========================================
@@ -362,12 +374,68 @@ $t->test('Asset contract directories and files are established', function ($t) u
 });
 
 // ==========================================
-// 7. ADMIN AUTHENTICATION MODULE
+// 7. CSRF PROTECTION ARCHITECTURE (Priority 1)
+// ==========================================
+$t->suite('CSRF Protection Architecture');
+
+$t->test('Csrf service generates and verifies 64-character token in session', function ($t) {
+    $token = \Core\Security\Csrf::token();
+    $t->assert(is_string($token) && strlen($token) === 64, 'Token must be 64-character hex string');
+    $t->assert(\Core\Security\Csrf::validate($token), 'Valid token must pass validation');
+
+    $t->assert(!\Core\Security\Csrf::validate('invalid-token'), 'Invalid token must fail validation');
+    $t->assert(!\Core\Security\Csrf::validate(''), 'Empty token must fail validation');
+    $t->assert(!\Core\Security\Csrf::validate(null), 'Null token must fail validation');
+
+    $regenerated = \Core\Security\Csrf::regenerateToken();
+    $t->assert($regenerated !== $token, 'Regenerated token must differ from old token');
+    $t->assert(\Core\Security\Csrf::validate($regenerated), 'Regenerated token must validate');
+    $t->assert(!\Core\Security\Csrf::validate($token), 'Old token must no longer validate');
+});
+
+$t->test('VerifyCsrfToken middleware blocks POST without token with HTTP 419', function ($t) use ($baseDir) {
+    $app = require $baseDir . '/bootstrap/app.php';
+    $kernel = $app->make(\Core\Application\Kernel::class);
+
+    $req = new \Core\Http\Request([], ['email' => 'test@example.com'], [
+        'REQUEST_METHOD' => 'POST',
+        'REQUEST_URI' => '/admin/login',
+    ]);
+    $res = $kernel->handle($req);
+
+    $t->assertEquals(419, $res->getStatusCode(), 'POST without CSRF token must return 419');
+    $t->assertContains('CSRF token mismatch', $res->getContent());
+});
+
+$t->test('VerifyCsrfToken middleware accepts valid token via input or header', function ($t) use ($baseDir) {
+    $token = \Core\Security\Csrf::token();
+    $middleware = new \App\Middleware\VerifyCsrfToken();
+
+    // 1. Safe GET request passes without token
+    $getReq = new \Core\Http\Request([], [], ['REQUEST_METHOD' => 'GET']);
+    $getRes = $middleware->handle($getReq, fn() => 'next-ok');
+    $t->assertEquals('next-ok', $getRes);
+
+    // 2. POST with valid _token input passes
+    $postReq = new \Core\Http\Request([], ['_token' => $token], ['REQUEST_METHOD' => 'POST']);
+    $postRes = $middleware->handle($postReq, fn() => 'next-ok');
+    $t->assertEquals('next-ok', $postRes);
+
+    // 3. POST with valid X-CSRF-TOKEN header passes
+    $headerReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'POST',
+        'HTTP_X_CSRF_TOKEN' => $token,
+    ]);
+    $headerRes = $middleware->handle($headerReq, fn() => 'next-ok');
+    $t->assertEquals('next-ok', $headerRes);
+});
+
+// ==========================================
+// 8. ADMIN AUTHENTICATION MODULE (Priority 5 & 6)
 // ==========================================
 $t->suite('Admin Authentication Module');
 
 $t->test('Admin User model creation and password hashing', function ($t) {
-    // Delete existing test user if any
     $existing = \App\Models\User::findByEmail('admin@syntaxcore.test');
     if ($existing) {
         $existing->delete();
@@ -415,9 +483,8 @@ $t->test('AuthService credentials verification and session storage', function ($
 
 $t->test('Guest access to protected /admin is redirected to /admin/login', function ($t) use ($baseDir) {
     $auth = new \App\Services\AuthService();
-    $auth->logout(); // Ensure guest
+    $auth->logout();
 
-    /** @var \Core\Application\Application $app */
     $app = require $baseDir . '/bootstrap/app.php';
     $kernel = $app->make(\Core\Application\Kernel::class);
 
@@ -428,11 +495,10 @@ $t->test('Guest access to protected /admin is redirected to /admin/login', funct
     $t->assertEquals('/admin/login', $res->getHeaders()['Location'] ?? null);
 });
 
-$t->test('Guest can access /admin/login and view Bootstrap login form', function ($t) use ($baseDir) {
+$t->test('Guest can access /admin/login and view Bootstrap login form with CSRF token', function ($t) use ($baseDir) {
     $auth = new \App\Services\AuthService();
     $auth->logout();
 
-    /** @var \Core\Application\Application $app */
     $app = require $baseDir . '/bootstrap/app.php';
     $kernel = $app->make(\Core\Application\Kernel::class);
 
@@ -441,20 +507,22 @@ $t->test('Guest can access /admin/login and view Bootstrap login form', function
 
     $t->assertEquals(200, $res->getStatusCode());
     $t->assertContains('Admin Login', $res->getContent());
+    $t->assertContains('name="_token"', $res->getContent());
     $t->assertContains('type="email"', $res->getContent());
     $t->assertContains('type="password"', $res->getContent());
 });
 
-$t->test('POST /admin/login handles valid and invalid submissions', function ($t) use ($baseDir) {
+$t->test('POST /admin/login handles valid CSRF with valid and invalid credentials', function ($t) use ($baseDir) {
     $auth = new \App\Services\AuthService();
     $auth->logout();
 
-    /** @var \Core\Application\Application $app */
     $app = require $baseDir . '/bootstrap/app.php';
     $kernel = $app->make(\Core\Application\Kernel::class);
+    $csrfToken = \Core\Security\Csrf::token();
 
-    // Invalid login attempt
+    // 1. Invalid credentials with valid CSRF token -> 422
     $invalidReq = new \Core\Http\Request([], [
+        '_token' => $csrfToken,
         'email' => 'admin@syntaxcore.test',
         'password' => 'wrongpassword',
     ], ['REQUEST_METHOD' => 'POST', 'REQUEST_URI' => '/admin/login']);
@@ -463,8 +531,9 @@ $t->test('POST /admin/login handles valid and invalid submissions', function ($t
     $t->assertEquals(422, $invalidRes->getStatusCode());
     $t->assertContains('Invalid credentials.', $invalidRes->getContent());
 
-    // Valid login attempt
+    // 2. Valid credentials with valid CSRF token -> 302 to /admin
     $validReq = new \Core\Http\Request([], [
+        '_token' => $csrfToken,
         'email' => 'admin@syntaxcore.test',
         'password' => 'secretpassword123',
     ], ['REQUEST_METHOD' => 'POST', 'REQUEST_URI' => '/admin/login']);
@@ -480,7 +549,6 @@ $t->test('Authenticated user can access /admin and cannot access /admin/login', 
     $auth->attempt('admin@syntaxcore.test', 'secretpassword123');
     $t->assert($auth->check(), 'Must be authenticated');
 
-    /** @var \Core\Application\Application $app */
     $app = require $baseDir . '/bootstrap/app.php';
     $kernel = $app->make(\Core\Application\Kernel::class);
 
@@ -491,6 +559,7 @@ $t->test('Authenticated user can access /admin and cannot access /admin/login', 
     $t->assertEquals(200, $res->getStatusCode());
     $t->assertContains('Admin Dashboard', $res->getContent());
     $t->assertContains('Admin Test', $res->getContent());
+    $t->assertContains('name="_token"', $res->getContent());
 
     // Attempt to access guest-only /admin/login
     $loginReq = new \Core\Http\Request([], [], ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/admin/login']);
@@ -500,23 +569,30 @@ $t->test('Authenticated user can access /admin and cannot access /admin/login', 
     $t->assertEquals('/admin', $loginRes->getHeaders()['Location'] ?? null);
 });
 
-$t->test('Logout clears session and subsequent protected requests redirect to login', function ($t) use ($baseDir) {
+$t->test('Logout requires CSRF, clears session, and revokes protected access', function ($t) use ($baseDir) {
     $auth = new \App\Services\AuthService();
     $auth->attempt('admin@syntaxcore.test', 'secretpassword123');
 
-    /** @var \Core\Application\Application $app */
     $app = require $baseDir . '/bootstrap/app.php';
     $kernel = $app->make(\Core\Application\Kernel::class);
 
-    // POST /admin/logout
-    $logoutReq = new \Core\Http\Request([], [], ['REQUEST_METHOD' => 'POST', 'REQUEST_URI' => '/admin/logout']);
+    // 1. POST /admin/logout without CSRF -> 419
+    $noCsrfReq = new \Core\Http\Request([], [], ['REQUEST_METHOD' => 'POST', 'REQUEST_URI' => '/admin/logout']);
+    $noCsrfRes = $kernel->handle($noCsrfReq);
+    $t->assertEquals(419, $noCsrfRes->getStatusCode());
+    $t->assert($auth->check(), 'User should still be authenticated after failed CSRF');
+
+    // 2. POST /admin/logout with valid CSRF -> 302 to /admin/login
+    $logoutReq = new \Core\Http\Request([], [
+        '_token' => \Core\Security\Csrf::token(),
+    ], ['REQUEST_METHOD' => 'POST', 'REQUEST_URI' => '/admin/logout']);
     $logoutRes = $kernel->handle($logoutReq);
 
     $t->assertEquals(302, $logoutRes->getStatusCode());
     $t->assertEquals('/admin/login', $logoutRes->getHeaders()['Location'] ?? null);
     $t->assert($auth->guest(), 'User must now be guest');
 
-    // Subsequent access to /admin redirects to login
+    // 3. Subsequent access to /admin redirects to login
     $adminReq = new \Core\Http\Request([], [], ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/admin']);
     $adminRes = $kernel->handle($adminReq);
 
