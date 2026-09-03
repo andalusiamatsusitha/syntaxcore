@@ -24,7 +24,8 @@ return [
     |
     */
     'aliases' => [
-        //
+        'auth' => \App\Middleware\Authenticate::class,
+        'guest' => \App\Middleware\RedirectIfAuthenticated::class,
     ],
 
     /*

@@ -59,6 +59,14 @@ abstract class Model implements JsonSerializable
         return $this;
     }
 
+    public function forceFill(array $attributes): static
+    {
+        foreach ($attributes as $key => $value) {
+            $this->attributes[$key] = $value;
+        }
+        return $this;
+    }
+
     public static function escapeIdentifier(string $identifier): string
     {
         if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $identifier)) {
@@ -104,7 +112,8 @@ abstract class Model implements JsonSerializable
         $rows = Connection::select("SELECT * FROM {$table}", [], $instance->connection);
 
         return array_map(function ($row) {
-            $model = new static($row);
+            $model = new static();
+            $model->forceFill($row);
             $model->original = $row;
             return $model;
         }, $rows);
@@ -122,7 +131,8 @@ abstract class Model implements JsonSerializable
             return null;
         }
 
-        $model = new static($row);
+        $model = new static();
+        $model->forceFill($row);
         $model->original = $row;
         return $model;
     }
@@ -146,7 +156,8 @@ abstract class Model implements JsonSerializable
         $rows = Connection::select($sql, [$value], $instance->connection);
 
         return array_map(function ($row) {
-            $model = new static($row);
+            $model = new static();
+            $model->forceFill($row);
             $model->original = $row;
             return $model;
         }, $rows);

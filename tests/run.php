@@ -8,6 +8,10 @@
 $baseDir = dirname(__DIR__);
 require_once $baseDir . '/vendor/autoload.php';
 
+if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
+    @session_start();
+}
+
 class TestRunner
 {
     private int $passed = 0;
@@ -355,6 +359,175 @@ $t->test('Asset contract directories and files are established', function ($t) u
     $t->assert(file_exists($baseDir . '/public/assets/js/app.js'), 'public/assets/js/app.js must exist');
     $t->assert(file_exists($baseDir . '/public/assets/vendor/bootstrap/css/bootstrap.min.css'), 'bootstrap.min.css must exist');
     $t->assert(file_exists($baseDir . '/public/assets/vendor/bootstrap/js/bootstrap.bundle.min.js'), 'bootstrap.bundle.min.js must exist');
+});
+
+// ==========================================
+// 7. ADMIN AUTHENTICATION MODULE
+// ==========================================
+$t->suite('Admin Authentication Module');
+
+$t->test('Admin User model creation and password hashing', function ($t) {
+    // Delete existing test user if any
+    $existing = \App\Models\User::findByEmail('admin@syntaxcore.test');
+    if ($existing) {
+        $existing->delete();
+    }
+
+    $user = new \App\Models\User([
+        'name' => 'Admin Test',
+        'email' => 'admin@syntaxcore.test',
+        'created_at' => date('Y-m-d H:i:s'),
+        'updated_at' => date('Y-m-d H:i:s'),
+    ]);
+    $user->setPassword('secretpassword123');
+    $t->assert($user->save(), 'User must be saved');
+    $t->assert($user->verifyPassword('secretpassword123'), 'Password must verify');
+    $t->assert(!$user->verifyPassword('wrongpassword'), 'Wrong password must not verify');
+
+    // Sensitive data exposure test: password must not appear in toArray()
+    $array = $user->toArray();
+    $t->assert(!isset($array['password']), 'Password must never appear in toArray()');
+});
+
+$t->test('AuthService credentials verification and session storage', function ($t) {
+    $auth = new \App\Services\AuthService();
+
+    // Unknown user fails
+    $t->assert(!$auth->attempt('unknown@syntaxcore.test', 'password'), 'Unknown user must fail');
+
+    // Invalid password fails
+    $t->assert(!$auth->attempt('admin@syntaxcore.test', 'wrongpassword'), 'Wrong password must fail');
+
+    // Valid credentials authenticate successfully
+    $t->assert($auth->attempt('admin@syntaxcore.test', 'secretpassword123'), 'Valid credentials must succeed');
+
+    // Session stores only required authentication identity (user_id)
+    $t->assert($auth->check(), 'AuthService::check must be true');
+    $t->assert(!empty($_SESSION['auth']['user_id']), 'Session must store auth.user_id');
+    $t->assert(!isset($_SESSION['auth']['password']), 'Session must not store password');
+    $t->assert(!isset($_SESSION['auth']['user']), 'Session must not store full User model');
+
+    // Retrieve user safely
+    $user = $auth->user();
+    $t->assert($user instanceof \App\Models\User, 'Current user must resolve to User model');
+    $t->assertEquals('admin@syntaxcore.test', $user->email);
+});
+
+$t->test('Guest access to protected /admin is redirected to /admin/login', function ($t) use ($baseDir) {
+    $auth = new \App\Services\AuthService();
+    $auth->logout(); // Ensure guest
+
+    /** @var \Core\Application\Application $app */
+    $app = require $baseDir . '/bootstrap/app.php';
+    $kernel = $app->make(\Core\Application\Kernel::class);
+
+    $req = new \Core\Http\Request([], [], ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/admin']);
+    $res = $kernel->handle($req);
+
+    $t->assertEquals(302, $res->getStatusCode());
+    $t->assertEquals('/admin/login', $res->getHeaders()['Location'] ?? null);
+});
+
+$t->test('Guest can access /admin/login and view Bootstrap login form', function ($t) use ($baseDir) {
+    $auth = new \App\Services\AuthService();
+    $auth->logout();
+
+    /** @var \Core\Application\Application $app */
+    $app = require $baseDir . '/bootstrap/app.php';
+    $kernel = $app->make(\Core\Application\Kernel::class);
+
+    $req = new \Core\Http\Request([], [], ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/admin/login']);
+    $res = $kernel->handle($req);
+
+    $t->assertEquals(200, $res->getStatusCode());
+    $t->assertContains('Admin Login', $res->getContent());
+    $t->assertContains('type="email"', $res->getContent());
+    $t->assertContains('type="password"', $res->getContent());
+});
+
+$t->test('POST /admin/login handles valid and invalid submissions', function ($t) use ($baseDir) {
+    $auth = new \App\Services\AuthService();
+    $auth->logout();
+
+    /** @var \Core\Application\Application $app */
+    $app = require $baseDir . '/bootstrap/app.php';
+    $kernel = $app->make(\Core\Application\Kernel::class);
+
+    // Invalid login attempt
+    $invalidReq = new \Core\Http\Request([], [
+        'email' => 'admin@syntaxcore.test',
+        'password' => 'wrongpassword',
+    ], ['REQUEST_METHOD' => 'POST', 'REQUEST_URI' => '/admin/login']);
+    $invalidRes = $kernel->handle($invalidReq);
+
+    $t->assertEquals(422, $invalidRes->getStatusCode());
+    $t->assertContains('Invalid credentials.', $invalidRes->getContent());
+
+    // Valid login attempt
+    $validReq = new \Core\Http\Request([], [
+        'email' => 'admin@syntaxcore.test',
+        'password' => 'secretpassword123',
+    ], ['REQUEST_METHOD' => 'POST', 'REQUEST_URI' => '/admin/login']);
+    $validRes = $kernel->handle($validReq);
+
+    $t->assertEquals(302, $validRes->getStatusCode());
+    $t->assertEquals('/admin', $validRes->getHeaders()['Location'] ?? null);
+    $t->assert($auth->check(), 'User must now be authenticated');
+});
+
+$t->test('Authenticated user can access /admin and cannot access /admin/login', function ($t) use ($baseDir) {
+    $auth = new \App\Services\AuthService();
+    $auth->attempt('admin@syntaxcore.test', 'secretpassword123');
+    $t->assert($auth->check(), 'Must be authenticated');
+
+    /** @var \Core\Application\Application $app */
+    $app = require $baseDir . '/bootstrap/app.php';
+    $kernel = $app->make(\Core\Application\Kernel::class);
+
+    // Access protected /admin
+    $req = new \Core\Http\Request([], [], ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/admin']);
+    $res = $kernel->handle($req);
+
+    $t->assertEquals(200, $res->getStatusCode());
+    $t->assertContains('Admin Dashboard', $res->getContent());
+    $t->assertContains('Admin Test', $res->getContent());
+
+    // Attempt to access guest-only /admin/login
+    $loginReq = new \Core\Http\Request([], [], ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/admin/login']);
+    $loginRes = $kernel->handle($loginReq);
+
+    $t->assertEquals(302, $loginRes->getStatusCode());
+    $t->assertEquals('/admin', $loginRes->getHeaders()['Location'] ?? null);
+});
+
+$t->test('Logout clears session and subsequent protected requests redirect to login', function ($t) use ($baseDir) {
+    $auth = new \App\Services\AuthService();
+    $auth->attempt('admin@syntaxcore.test', 'secretpassword123');
+
+    /** @var \Core\Application\Application $app */
+    $app = require $baseDir . '/bootstrap/app.php';
+    $kernel = $app->make(\Core\Application\Kernel::class);
+
+    // POST /admin/logout
+    $logoutReq = new \Core\Http\Request([], [], ['REQUEST_METHOD' => 'POST', 'REQUEST_URI' => '/admin/logout']);
+    $logoutRes = $kernel->handle($logoutReq);
+
+    $t->assertEquals(302, $logoutRes->getStatusCode());
+    $t->assertEquals('/admin/login', $logoutRes->getHeaders()['Location'] ?? null);
+    $t->assert($auth->guest(), 'User must now be guest');
+
+    // Subsequent access to /admin redirects to login
+    $adminReq = new \Core\Http\Request([], [], ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/admin']);
+    $adminRes = $kernel->handle($adminReq);
+
+    $t->assertEquals(302, $adminRes->getStatusCode());
+    $t->assertEquals('/admin/login', $adminRes->getHeaders()['Location'] ?? null);
+
+    // Cleanup test user
+    $testUser = \App\Models\User::findByEmail('admin@syntaxcore.test');
+    if ($testUser) {
+        $testUser->delete();
+    }
 });
 
 // Print final summary
