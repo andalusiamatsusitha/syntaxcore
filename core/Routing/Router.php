@@ -17,10 +17,34 @@ class Router
     /** @var Route[] */
     protected array $routes = [];
     protected array $groupStack = [];
+    protected array $middlewareAliases = [];
+    protected array $middlewarePriority = [];
 
     public function __construct(?Container $container = null)
     {
         $this->container = $container ?? Container::getInstance();
+    }
+
+    public function setMiddlewareAliases(array $aliases): static
+    {
+        $this->middlewareAliases = $aliases;
+        return $this;
+    }
+
+    public function getMiddlewareAliases(): array
+    {
+        return $this->middlewareAliases;
+    }
+
+    public function setMiddlewarePriority(array $priority): static
+    {
+        $this->middlewarePriority = $priority;
+        return $this;
+    }
+
+    public function getMiddlewarePriority(): array
+    {
+        return $this->middlewarePriority;
     }
 
     public function get(string $uri, mixed $action): Route
@@ -127,13 +151,49 @@ class Router
         $request->setParams($matchedRoute->getParameters());
 
         $pipeline = new Pipeline($this->container);
+        $middlewares = $this->resolveRouteMiddleware($matchedRoute);
 
         return $pipeline
             ->send($request)
-            ->through($matchedRoute->getMiddleware())
+            ->through($middlewares)
             ->then(function ($request) use ($matchedRoute) {
                 return $this->runAction($matchedRoute->getAction(), $request);
             });
+    }
+
+    public function resolveRouteMiddleware(Route $route): array
+    {
+        $resolved = [];
+        foreach ($route->getMiddleware() as $middleware) {
+            if (is_string($middleware) && isset($this->middlewareAliases[$middleware])) {
+                $resolved[] = $this->middlewareAliases[$middleware];
+            } else {
+                $resolved[] = $middleware;
+            }
+        }
+
+        if (empty($this->middlewarePriority)) {
+            return $resolved;
+        }
+
+        return $this->sortMiddlewareByPriority($resolved);
+    }
+
+    protected function sortMiddlewareByPriority(array $middlewares): array
+    {
+        $priorityMap = array_flip($this->middlewarePriority);
+
+        usort($middlewares, function ($a, $b) use ($priorityMap) {
+            $aName = is_string($a) ? $a : (is_object($a) ? get_class($a) : '');
+            $bName = is_string($b) ? $b : (is_object($b) ? get_class($b) : '');
+
+            $priorityA = $priorityMap[$aName] ?? PHP_INT_MAX;
+            $priorityB = $priorityMap[$bName] ?? PHP_INT_MAX;
+
+            return $priorityA <=> $priorityB;
+        });
+
+        return $middlewares;
     }
 
     protected function runAction(mixed $action, Request $request): Response

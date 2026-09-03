@@ -116,6 +116,8 @@ class Application extends Container
 
     protected function registerCoreBindings(): void
     {
+        \Core\View\View::setBasePath($this->resourcePath('views'));
+
         $this->singleton(Router::class, function () {
             return new Router($this);
         });
@@ -128,7 +130,7 @@ class Application extends Container
     protected function registerExceptionHandler(): void
     {
         $debug = (bool) $this->config('app.debug', true);
-        $handler = new ExceptionHandler($debug);
+        $handler = new ExceptionHandler($debug, $this);
         $handler->register();
 
         $this->singleton(ExceptionHandler::class, function () use ($handler) {

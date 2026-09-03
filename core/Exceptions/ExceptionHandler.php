@@ -2,6 +2,8 @@
 
 namespace Core\Exceptions;
 
+use Core\Application\Application;
+use Core\Application\Container;
 use Core\Http\Request;
 use Core\Http\Response;
 use Throwable;
@@ -9,10 +11,12 @@ use Throwable;
 class ExceptionHandler
 {
     protected bool $debug;
+    protected ?Application $app;
 
-    public function __construct(bool $debug = true)
+    public function __construct(bool $debug = true, ?Application $app = null)
     {
         $this->debug = $debug;
+        $this->app = $app ?? (Container::getInstance() instanceof Application ? Container::getInstance() : null);
     }
 
     public function register(): void
@@ -54,7 +58,7 @@ class ExceptionHandler
         }
 
         // Check if custom error view exists
-        $viewsPath = dirname(__DIR__, 2) . '/resources/views/errors';
+        $viewsPath = $this->getErrorViewsPath();
         $viewFile = "{$viewsPath}/{$statusCode}.php";
         if (!file_exists($viewFile)) {
             $viewFile = "{$viewsPath}/500.php";
@@ -119,5 +123,14 @@ class ExceptionHandler
 </body>
 </html>
 HTML;
+    }
+
+    protected function getErrorViewsPath(): string
+    {
+        if ($this->app) {
+            return $this->app->resourcePath('views/errors');
+        }
+
+        return dirname(__DIR__, 2) . '/resources/views/errors';
     }
 }

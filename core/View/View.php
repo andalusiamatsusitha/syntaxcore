@@ -2,6 +2,8 @@
 
 namespace Core\View;
 
+use Core\Application\Application;
+use Core\Application\Container;
 use Core\Http\Response;
 use Exception;
 
@@ -18,7 +20,12 @@ class View
     public static function getBasePath(): string
     {
         if (is_null(static::$basePath)) {
-            static::$basePath = dirname(__DIR__, 2) . '/resources/views';
+            $container = Container::getInstance();
+            if ($container instanceof Application) {
+                static::$basePath = $container->resourcePath('views');
+            } else {
+                static::$basePath = dirname(__DIR__, 2) . '/resources/views';
+            }
         }
         return static::$basePath;
     }

@@ -17,42 +17,104 @@ class Kernel
      */
     protected array $middleware = [];
 
+    /**
+     * The application's route middleware aliases.
+     */
+    protected array $routeMiddleware = [];
+
+    /**
+     * The priority-sorted list of middleware.
+     */
+    protected array $middlewarePriority = [];
+
+    protected mixed $routeLoader = null;
+    protected bool $routesLoaded = false;
+
     public function __construct(Application $app, Router $router)
     {
         $this->app = $app;
         $this->router = $router;
 
-        $this->loadRoutes();
+        $this->bootstrapMiddleware();
     }
 
-    protected function loadRoutes(): void
+    protected function bootstrapMiddleware(): void
     {
-        $routesPath = $this->app->routesPath();
-        $router = $this->router;
+        $config = $this->app->config('middleware', []);
 
-        // Load web routes
-        if (file_exists("{$routesPath}/web.php")) {
-            require "{$routesPath}/web.php";
+        $this->middleware = $config['global'] ?? [];
+        $this->routeMiddleware = $config['aliases'] ?? [];
+        $this->middlewarePriority = $config['priority'] ?? [];
+
+        $this->router->setMiddlewareAliases($this->routeMiddleware);
+        $this->router->setMiddlewarePriority($this->middlewarePriority);
+    }
+
+    public function getMiddleware(): array
+    {
+        return $this->middleware;
+    }
+
+    public function setMiddleware(array $middleware): static
+    {
+        $this->middleware = $middleware;
+        return $this;
+    }
+
+    public function getRouteMiddleware(): array
+    {
+        return $this->routeMiddleware;
+    }
+
+    public function setRouteMiddleware(array $routeMiddleware): static
+    {
+        $this->routeMiddleware = $routeMiddleware;
+        $this->router->setMiddlewareAliases($routeMiddleware);
+        return $this;
+    }
+
+    public function getMiddlewarePriority(): array
+    {
+        return $this->middlewarePriority;
+    }
+
+    public function setMiddlewarePriority(array $priority): static
+    {
+        $this->middlewarePriority = $priority;
+        $this->router->setMiddlewarePriority($priority);
+        return $this;
+    }
+
+    public function loadRoutesUsing(callable $loader): static
+    {
+        $this->routeLoader = $loader;
+        $this->routesLoaded = false;
+        return $this;
+    }
+
+    public function bootRoutes(): void
+    {
+        if ($this->routesLoaded) {
+            return;
         }
 
-        // Load admin routes with '/admin' prefix
-        if (file_exists("{$routesPath}/admin.php")) {
-            $router->group(['prefix' => 'admin'], function ($router) use ($routesPath) {
-                require "{$routesPath}/admin.php";
-            });
+        if (is_callable($this->routeLoader)) {
+            ($this->routeLoader)($this->router, $this->app);
         }
 
-        // Load api routes with '/api' prefix
-        if (file_exists("{$routesPath}/api.php")) {
-            $router->group(['prefix' => 'api'], function ($router) use ($routesPath) {
-                require "{$routesPath}/api.php";
-            });
-        }
+        $this->routesLoaded = true;
+    }
+
+    public function getRouter(): Router
+    {
+        return $this->router;
     }
 
     public function handle(Request $request): Response
     {
         try {
+            $this->bootRoutes();
+
             $pipeline = new Pipeline($this->app);
 
             return $pipeline
