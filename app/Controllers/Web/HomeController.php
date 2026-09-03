@@ -10,7 +10,7 @@ class HomeController extends Controller
 {
     public function index(Request $request): Response
     {
-        return $this->view('web.index', [
+        return $this->view([
             'appName' => 'SyntaxCore',
             'version' => '1.0.0',
             'phpVersion' => PHP_VERSION,

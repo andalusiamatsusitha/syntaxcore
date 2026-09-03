@@ -225,6 +225,10 @@ class Router
 
     protected function callAction(object $instance, string $method, Request $request): mixed
     {
+        if (method_exists($instance, 'setActionMethod')) {
+            $instance->setActionMethod($method);
+        }
+
         $reflector = new ReflectionMethod($instance, $method);
         $parameters = $this->resolveActionParameters($reflector, $request);
         return $reflector->invokeArgs($instance, $parameters);
