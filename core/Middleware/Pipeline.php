@@ -55,6 +55,15 @@ class Pipeline
                     return $pipe($passable, $stack);
                 }
 
+                if (is_object($pipe)) {
+                    if ($pipe instanceof MiddlewareInterface) {
+                        return $pipe->handle($passable, $stack);
+                    }
+                    if (method_exists($pipe, 'handle')) {
+                        return $pipe->handle($passable, $stack);
+                    }
+                }
+
                 if (is_string($pipe)) {
                     $instance = $this->container ? $this->container->make($pipe) : new $pipe();
                     if ($instance instanceof MiddlewareInterface) {

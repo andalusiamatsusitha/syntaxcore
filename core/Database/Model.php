@@ -17,6 +17,16 @@ abstract class Model implements JsonSerializable
     protected static array $allowedOperators = [
         '=', '!=', '<>', '<', '<=', '>', '>=', 'LIKE', 'NOT LIKE', 'ILIKE', 'IS', 'IS NOT'
     ];
+    protected static array $allowedDirections = ['ASC', 'DESC'];
+
+    public static function validateDirection(string $direction): string
+    {
+        $dir = strtoupper(trim($direction));
+        if (!in_array($dir, static::$allowedDirections, true)) {
+            throw new \InvalidArgumentException("Invalid sort direction: [{$direction}]. Only ASC or DESC allowed.");
+        }
+        return $dir;
+    }
 
     public function __construct(array $attributes = [])
     {
