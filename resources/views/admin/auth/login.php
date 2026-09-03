@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="<?= csrf_token() ?>">
     <title>Admin Login - SyntaxCore</title>
     <!-- Bootstrap CSS -->
     <link rel="stylesheet" href="/assets/vendor/bootstrap/css/bootstrap.min.css">
@@ -27,7 +28,7 @@
             <?php endif; ?>
 
             <form action="/admin/login" method="POST">
-                <input type="hidden" name="_token" value="<?= htmlspecialchars(\Core\Security\Csrf::token()) ?>">
+                <?= csrf_field() ?>
                 <div class="mb-3">
                     <label for="email" class="form-label small fw-semibold">Email Address</label>
                     <input type="email" class="form-control" id="email" name="email"

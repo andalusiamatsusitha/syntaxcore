@@ -75,11 +75,17 @@ class Request
         return $headers;
     }
 
+    /**
+     * Get the request HTTP method (Primary SyntaxCore convention).
+     */
     public function method(): string
     {
         return $this->method;
     }
 
+    /**
+     * Get the request HTTP method (Compatibility alias for PSR-7 / external callers).
+     */
     public function getMethod(): string
     {
         return $this->method();

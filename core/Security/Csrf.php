@@ -2,32 +2,25 @@
 
 namespace Core\Security;
 
+use Core\Session\Session;
+
 class Csrf
 {
     public const TOKEN_KEY = '_token';
-
-    /**
-     * Ensure session is active.
-     */
-    public static function ensureSessionStarted(): void
-    {
-        if (session_status() !== PHP_SESSION_ACTIVE) {
-            session_start();
-        }
-    }
 
     /**
      * Get current CSRF token from session or generate a new one.
      */
     public static function token(): string
     {
-        static::ensureSessionStarted();
+        $token = Session::get(static::TOKEN_KEY);
 
-        if (empty($_SESSION[static::TOKEN_KEY]) || !is_string($_SESSION[static::TOKEN_KEY])) {
-            $_SESSION[static::TOKEN_KEY] = bin2hex(random_bytes(32));
+        if (empty($token) || !is_string($token)) {
+            $token = bin2hex(random_bytes(32));
+            Session::set(static::TOKEN_KEY, $token);
         }
 
-        return $_SESSION[static::TOKEN_KEY];
+        return $token;
     }
 
     /**
@@ -35,8 +28,9 @@ class Csrf
      */
     public static function regenerateToken(): string
     {
-        static::ensureSessionStarted();
-        return $_SESSION[static::TOKEN_KEY] = bin2hex(random_bytes(32));
+        $token = bin2hex(random_bytes(32));
+        Session::set(static::TOKEN_KEY, $token);
+        return $token;
     }
 
     /**
@@ -50,5 +44,13 @@ class Csrf
 
         $knownToken = static::token();
         return hash_equals($knownToken, $token);
+    }
+
+    /**
+     * Generate HTML hidden input field containing the CSRF token.
+     */
+    public static function field(): string
+    {
+        return '<input type="hidden" name="' . static::TOKEN_KEY . '" value="' . htmlspecialchars(static::token(), ENT_QUOTES, 'UTF-8') . '">';
     }
 }

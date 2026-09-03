@@ -3,20 +3,12 @@
 namespace App\Services;
 
 use App\Models\User;
+use Core\Security\Csrf;
+use Core\Session\Session;
 
 class AuthService
 {
     protected ?User $currentUser = null;
-
-    /**
-     * Ensure PHP session is active.
-     */
-    public function ensureSessionStarted(): void
-    {
-        if (session_status() !== PHP_SESSION_ACTIVE) {
-            session_start();
-        }
-    }
 
     /**
      * Attempt to authenticate a user using credentials.
@@ -38,14 +30,14 @@ class AuthService
      */
     public function login(User $user): void
     {
-        $this->ensureSessionStarted();
+        // 1. Regenerate session ID to prevent session fixation attacks
+        Session::regenerate(true);
 
-        // Regenerate session ID to prevent session fixation attacks
-        if (session_status() === PHP_SESSION_ACTIVE && !headers_sent()) {
-            session_regenerate_id(true);
-        }
+        // 2. Regenerate CSRF token on authentication state transition
+        Csrf::regenerateToken();
 
-        $_SESSION['auth']['user_id'] = $user->id;
+        // 3. Store authentication identifier
+        Session::set('auth.user_id', $user->id);
         $this->currentUser = $user;
     }
 
@@ -54,8 +46,7 @@ class AuthService
      */
     public function check(): bool
     {
-        $this->ensureSessionStarted();
-        return !empty($_SESSION['auth']['user_id']);
+        return !empty(Session::get('auth.user_id'));
     }
 
     /**
@@ -71,8 +62,8 @@ class AuthService
      */
     public function id(): ?int
     {
-        $this->ensureSessionStarted();
-        return isset($_SESSION['auth']['user_id']) ? (int) $_SESSION['auth']['user_id'] : null;
+        $id = Session::get('auth.user_id');
+        return $id ? (int) $id : null;
     }
 
     /**
@@ -93,22 +84,19 @@ class AuthService
     }
 
     /**
-     * Log the user out and clean session safely.
+     * Log the user out, clean authentication state, and reset CSRF token.
      */
     public function logout(): void
     {
-        $this->ensureSessionStarted();
+        // 1. Remove authentication identity
+        Session::remove('auth.user_id');
 
-        if (isset($_SESSION['auth'])) {
-            unset($_SESSION['auth']['user_id']);
-            if (empty($_SESSION['auth'])) {
-                unset($_SESSION['auth']);
-            }
-        }
+        // 2. Regenerate session ID
+        Session::regenerate(true);
 
-        if (session_status() === PHP_SESSION_ACTIVE && !headers_sent()) {
-            session_regenerate_id(true);
-        }
+        // 3. Regenerate CSRF token for new anonymous session
+        Csrf::regenerateToken();
+
         $this->currentUser = null;
     }
 }

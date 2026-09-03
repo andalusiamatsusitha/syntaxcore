@@ -15,7 +15,10 @@
         "psr-4": {
             "App\\": "app/",
             "Core\\": "core/"
-        }
+        },
+        "files": [
+            "core/Support/helpers.php"
+        ]
     },
     "config": {
         "optimize-autoloader": true,

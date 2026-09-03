@@ -430,8 +430,114 @@ $t->test('VerifyCsrfToken middleware accepts valid token via input or header', f
     $t->assertEquals('next-ok', $headerRes);
 });
 
+$t->test('VerifyCsrfToken protects all state-changing methods PUT, PATCH, DELETE', function ($t) {
+    $token = \Core\Security\Csrf::token();
+    $middleware = new \App\Middleware\VerifyCsrfToken();
+
+    foreach (['PUT', 'PATCH', 'DELETE'] as $method) {
+        // Without token -> 419
+        $reqWithout = new \Core\Http\Request([], [], ['REQUEST_METHOD' => $method]);
+        $resWithout = $middleware->handle($reqWithout, fn() => 'ok');
+        $t->assert($resWithout instanceof \Core\Http\Response, "{$method} without CSRF must return Response");
+        $t->assertEquals(419, $resWithout->getStatusCode(), "{$method} without CSRF must return 419");
+
+        // With token -> passes
+        $reqWith = new \Core\Http\Request([], ['_token' => $token], ['REQUEST_METHOD' => $method]);
+        $resWith = $middleware->handle($reqWith, fn() => 'ok');
+        $t->assertEquals('ok', $resWith, "{$method} with CSRF must pass");
+    }
+});
+
+$t->test('Global CSRF helpers csrf_token() and csrf_field() work consistently', function ($t) {
+    $t->assert(function_exists('csrf_token'), 'csrf_token() helper must exist');
+    $t->assert(function_exists('csrf_field'), 'csrf_field() helper must exist');
+
+    $token = csrf_token();
+    $t->assert(is_string($token) && strlen($token) === 64, 'csrf_token() must return 64-char string');
+    $t->assertEquals(\Core\Security\Csrf::token(), $token, 'csrf_token() must match Csrf::token()');
+
+    $field = csrf_field();
+    $t->assertContains('name="_token"', $field, 'csrf_field() must contain name="_token"');
+    $t->assertContains($token, $field, 'csrf_field() must contain current token value');
+    $t->assertContains('<input type="hidden"', $field, 'csrf_field() must be hidden input');
+});
+
 // ==========================================
-// 8. ADMIN AUTHENTICATION MODULE (Priority 5 & 6)
+// 8. SESSION LIFECYCLE & CENTRALIZATION (Priority 1)
+// ==========================================
+$t->suite('Session Lifecycle & Centralization');
+
+$t->test('Core Session manager handles lifecycle and state', function ($t) {
+    \Core\Session\Session::start();
+    $t->assert(\Core\Session\Session::isStarted(), 'Session must be started');
+
+    \Core\Session\Session::set('test_key', 'test_value');
+    $t->assert(\Core\Session\Session::has('test_key'), 'Session must have test_key');
+    $t->assertEquals('test_value', \Core\Session\Session::get('test_key'));
+    $t->assertEquals('default', \Core\Session\Session::get('non_existent', 'default'));
+
+    \Core\Session\Session::remove('test_key');
+    $t->assert(!\Core\Session\Session::has('test_key'), 'test_key must be removed');
+
+    $all = \Core\Session\Session::all();
+    $t->assert(is_array($all), 'Session::all() must return array');
+});
+
+$t->test('CSRF and AuthService both use centralized Session', function ($t) {
+    // Both read/write through Core\Session\Session
+    $token = \Core\Security\Csrf::token();
+    $t->assertEquals($token, \Core\Session\Session::get(\Core\Security\Csrf::TOKEN_KEY));
+
+    $auth = new \App\Services\AuthService();
+    $auth->logout();
+    $t->assert(empty(\Core\Session\Session::get('auth.user_id')));
+});
+
+$t->test('CSRF token regenerates on login and logout transitions', function ($t) {
+    // Seed user for test if not exists
+    $user = \App\Models\User::findByEmail('admin@syntaxcore.test');
+    if (!$user) {
+        $user = new \App\Models\User([
+            'name' => 'Admin Test',
+            'email' => 'admin@syntaxcore.test',
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s'),
+        ]);
+        $user->setPassword('secretpassword123');
+        $user->save();
+    }
+
+    // 1. Initial anonymous token
+    $tokenA = \Core\Security\Csrf::token();
+    $t->assert(!empty($tokenA));
+
+    // 2. Login transition regenerates token
+    $auth = new \App\Services\AuthService();
+    $auth->attempt('admin@syntaxcore.test', 'secretpassword123');
+    $tokenB = \Core\Security\Csrf::token();
+
+    $t->assert($tokenB !== $tokenA, 'Token must be regenerated on login');
+    $t->assert(\Core\Security\Csrf::validate($tokenB), 'New token B must be valid');
+    $t->assert(!\Core\Security\Csrf::validate($tokenA), 'Old token A must no longer be valid');
+
+    // 3. Logout transition regenerates token for new anonymous session
+    $auth->logout();
+    $tokenC = \Core\Security\Csrf::token();
+
+    $t->assert($tokenC !== $tokenB, 'Token must be regenerated on logout');
+    $t->assert(\Core\Security\Csrf::validate($tokenC), 'New token C must be valid');
+    $t->assert(!\Core\Security\Csrf::validate($tokenB), 'Old token B must no longer be valid');
+});
+
+$t->test('JavaScript API client includes csrfToken method and attaches X-CSRF-TOKEN', function ($t) use ($baseDir) {
+    $jsContent = file_get_contents($baseDir . '/public/assets/js/app.js');
+    $t->assertContains('csrfToken()', $jsContent, 'JS client must have csrfToken method');
+    $t->assertContains('X-CSRF-TOKEN', $jsContent, 'JS client must attach X-CSRF-TOKEN');
+    $t->assertContains('meta[name="csrf-token"]', $jsContent, 'JS client must query meta csrf-token');
+});
+
+// ==========================================
+// 9. ADMIN AUTHENTICATION MODULE (Priority 5 & 6)
 // ==========================================
 $t->suite('Admin Authentication Module');
 

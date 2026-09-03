@@ -17,7 +17,7 @@ class VerifyCsrfToken implements MiddlewareInterface
 
     public function handle(Request $request, Closure $next): mixed
     {
-        if (in_array(strtoupper($request->getMethod()), $this->protectedMethods, true)) {
+        if (in_array(strtoupper($request->method()), $this->protectedMethods, true)) {
             $token = $request->input(Csrf::TOKEN_KEY) ?? $request->header('X-CSRF-TOKEN');
 
             if (!Csrf::validate($token)) {
