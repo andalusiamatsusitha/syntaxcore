@@ -13,6 +13,11 @@ abstract class Model implements JsonSerializable
     protected array $attributes = [];
     protected array $original = [];
 
+    protected array $fillable = [];
+    protected static array $allowedOperators = [
+        '=', '!=', '<>', '<', '<=', '>', '>=', 'LIKE', 'NOT LIKE', 'ILIKE', 'IS', 'IS NOT'
+    ];
+
     public function __construct(array $attributes = [])
     {
         $this->fill($attributes);
@@ -36,9 +41,20 @@ abstract class Model implements JsonSerializable
     public function fill(array $attributes): static
     {
         foreach ($attributes as $key => $value) {
+            if (!empty($this->fillable) && !in_array($key, $this->fillable, true)) {
+                continue;
+            }
             $this->attributes[$key] = $value;
         }
         return $this;
+    }
+
+    public static function escapeIdentifier(string $identifier): string
+    {
+        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $identifier)) {
+            throw new \InvalidArgumentException("Invalid database identifier: [{$identifier}]");
+        }
+        return "`{$identifier}`";
     }
 
     public function __get(string $key): mixed
@@ -74,7 +90,7 @@ abstract class Model implements JsonSerializable
     public static function all(): array
     {
         $instance = new static();
-        $table = $instance->getTable();
+        $table = static::escapeIdentifier($instance->getTable());
         $rows = Connection::select("SELECT * FROM {$table}", [], $instance->connection);
 
         return array_map(function ($row) {
@@ -87,8 +103,8 @@ abstract class Model implements JsonSerializable
     public static function find(mixed $id): ?static
     {
         $instance = new static();
-        $table = $instance->getTable();
-        $pk = $instance->getPrimaryKey();
+        $table = static::escapeIdentifier($instance->getTable());
+        $pk = static::escapeIdentifier($instance->getPrimaryKey());
 
         $row = Connection::selectOne("SELECT * FROM {$table} WHERE {$pk} = ? LIMIT 1", [$id], $instance->connection);
 
@@ -108,9 +124,15 @@ abstract class Model implements JsonSerializable
             $operator = '=';
         }
 
+        $operator = strtoupper(trim((string) $operator));
+        if (!in_array($operator, static::$allowedOperators, true)) {
+            throw new \InvalidArgumentException("Unsupported SQL operator: [{$operator}]");
+        }
+
         $instance = new static();
-        $table = $instance->getTable();
-        $sql = "SELECT * FROM {$table} WHERE {$column} {$operator} ?";
+        $table = static::escapeIdentifier($instance->getTable());
+        $col = static::escapeIdentifier($column);
+        $sql = "SELECT * FROM {$table} WHERE {$col} {$operator} ?";
         $rows = Connection::select($sql, [$value], $instance->connection);
 
         return array_map(function ($row) {
@@ -129,15 +151,16 @@ abstract class Model implements JsonSerializable
 
     public function save(): bool
     {
-        $table = $this->getTable();
+        $table = static::escapeIdentifier($this->getTable());
         $pk = $this->getPrimaryKey();
+        $escapedPk = static::escapeIdentifier($pk);
         $pdo = Connection::get($this->connection);
 
         if (isset($this->attributes[$pk]) && !empty($this->original)) {
             // Update
             $fields = array_keys($this->attributes);
-            $setClauses = implode(', ', array_map(fn($f) => "{$f} = ?", $fields));
-            $sql = "UPDATE {$table} SET {$setClauses} WHERE {$pk} = ?";
+            $setClauses = implode(', ', array_map(fn($f) => static::escapeIdentifier($f) . " = ?", $fields));
+            $sql = "UPDATE {$table} SET {$setClauses} WHERE {$escapedPk} = ?";
             $values = array_values($this->attributes);
             $values[] = $this->attributes[$pk];
 
@@ -150,7 +173,7 @@ abstract class Model implements JsonSerializable
         } else {
             // Insert
             $fields = array_keys($this->attributes);
-            $columns = implode(', ', $fields);
+            $columns = implode(', ', array_map([static::class, 'escapeIdentifier'], $fields));
             $placeholders = implode(', ', array_fill(0, count($fields), '?'));
             $sql = "INSERT INTO {$table} ({$columns}) VALUES ({$placeholders})";
 
@@ -181,8 +204,9 @@ abstract class Model implements JsonSerializable
             return false;
         }
 
-        $table = $this->getTable();
-        $sql = "DELETE FROM {$table} WHERE {$pk} = ?";
+        $table = static::escapeIdentifier($this->getTable());
+        $escapedPk = static::escapeIdentifier($pk);
+        $sql = "DELETE FROM {$table} WHERE {$escapedPk} = ?";
         return Connection::statement($sql, [$this->attributes[$pk]], $this->connection);
     }
 }
