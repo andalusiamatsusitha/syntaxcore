@@ -11,10 +11,15 @@ div.wp-menu span {
     font-size: 13px;
 }
 
+div.wp-menu.wp-menu-active,
 div.wp-menu:hover {
-    backdrop-filter: brightness(0.95);
+    background: rgba(13, 110, 253, 0.12);
+    border-color: rgba(13, 110, 253, 0.25);
+    color: #0d6efd;
+    font-weight: 600;
 }
 
+div.wp-menu.wp-menu-active::after,
 div.wp-menu:hover::after {
     content: '';
     position: absolute;
@@ -29,6 +34,7 @@ div.wp-menu:hover::after {
 /* wd-workspace */
 main.wd-workspace {
     position: relative;
+    overflow: hidden;
 }
 
 /* wd-menu-window */
@@ -37,4 +43,203 @@ div.wd-menu-window {
     background-color: rgba(0, 0, 0, 0.5);
     left: 0;
     bottom: 0;
+}
+
+/* wd-window desktop styles */
+.wd-window {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+
+.wd-window-header {
+    cursor: grab;
+}
+
+.wd-window-header:active {
+    cursor: grabbing;
+}
+
+.wd-window-body {
+    user-select: text;
+    flex-grow: 1;
+}
+
+/* Window Transition during Snapping/Restore */
+.wd-window.wd-window-snapping {
+    transition: top 0.15s cubic-bezier(0.16, 1, 0.3, 1),
+        left 0.15s cubic-bezier(0.16, 1, 0.3, 1),
+        width 0.15s cubic-bezier(0.16, 1, 0.3, 1),
+        height 0.15s cubic-bezier(0.16, 1, 0.3, 1),
+        border-radius 0.15s ease;
+}
+
+/* Hide resize handles when window is maximized or snapped */
+.wd-window[data-is-maximized="true"] .wd-resize-handle,
+.wd-window[data-snap-state="top"] .wd-resize-handle,
+.wd-window[data-snap-state="left"] .wd-resize-handle,
+.wd-window[data-snap-state="right"] .wd-resize-handle {
+    display: none !important;
+}
+
+/* 8-Directional Resize Handles */
+.wd-resize-handle {
+    position: absolute;
+    z-index: 10;
+}
+
+.wd-resize-handle-n {
+    top: -4px;
+    left: 8px;
+    right: 8px;
+    height: 8px;
+    cursor: ns-resize;
+}
+
+.wd-resize-handle-s {
+    bottom: -4px;
+    left: 8px;
+    right: 8px;
+    height: 8px;
+    cursor: ns-resize;
+}
+
+.wd-resize-handle-w {
+    top: 8px;
+    bottom: 8px;
+    left: -4px;
+    width: 8px;
+    cursor: ew-resize;
+}
+
+.wd-resize-handle-e {
+    top: 8px;
+    bottom: 8px;
+    right: -4px;
+    width: 8px;
+    cursor: ew-resize;
+}
+
+.wd-resize-handle-nw {
+    top: -5px;
+    left: -5px;
+    width: 14px;
+    height: 14px;
+    cursor: nwse-resize;
+    z-index: 11;
+}
+
+.wd-resize-handle-ne {
+    top: -5px;
+    right: -5px;
+    width: 14px;
+    height: 14px;
+    cursor: nesw-resize;
+    z-index: 11;
+}
+
+.wd-resize-handle-sw {
+    bottom: -5px;
+    left: -5px;
+    width: 14px;
+    height: 14px;
+    cursor: nesw-resize;
+    z-index: 11;
+}
+
+.wd-resize-handle-se {
+    bottom: -5px;
+    right: -5px;
+    width: 14px;
+    height: 14px;
+    cursor: nwse-resize;
+    z-index: 11;
+}
+
+/* Subtle classic grip visual on bottom-right corner */
+.wd-resize-handle-se::after {
+    content: '';
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    width: 6px;
+    height: 6px;
+    border-right: 2px solid #94a3b8;
+    border-bottom: 2px solid #94a3b8;
+}
+
+/* Aero Snap Ghost Preview */
+.wd-snap-preview {
+    position: absolute;
+    background: rgba(13, 110, 253, 0.18);
+    border: 2px dashed rgba(13, 110, 253, 0.65);
+    backdrop-filter: blur(2px);
+    border-radius: 8px;
+    z-index: 50;
+    pointer-events: none;
+    transition: all 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* wd-taskbar active items in footer */
+#wd-active-content {
+    display: flex;
+    align-items: stretch;
+    height: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+}
+
+#wd-active-content::-webkit-scrollbar {
+    display: none;
+}
+
+.wd-taskbar-item {
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    height: 100%;
+    padding: 0 12px;
+    border-radius: 0;
+    user-select: none;
+    transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+    color: #334155;
+    font-size: 13px;
+    white-space: nowrap;
+    border: none;
+}
+
+.wd-taskbar-item:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: #0f172a;
+}
+
+.wd-taskbar-item.active {
+    background: rgba(13, 110, 253, 0.12);
+    border-color: rgba(13, 110, 253, 0.25);
+    color: #0d6efd;
+    font-weight: 600;
+}
+
+.wd-taskbar-item.active::after {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 2px;
+    background: #0d6efd;
+    left: 0;
+    top: 0;
+    border-radius: 10px;
+}
+
+.wd-taskbar-item.minimized {
+    opacity: 0.6;
+    background: transparent;
+}
+
+.wd-taskbar-item.minimized:hover {
+    opacity: 0.9;
+    background: rgba(0, 0, 0, 0.05);
 }

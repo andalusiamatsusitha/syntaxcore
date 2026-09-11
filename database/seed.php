@@ -154,6 +154,7 @@ try {
             'title' => 'Dashboard Overview',
             'icon' => 'fa-solid fa-gauge-high',
             'action' => 'open_dashboard',
+            'route' => '/admin',
             'badge' => null,
             'sort_order' => 1,
             'roles' => ['user', 'admin', 'superadmin'],
@@ -163,6 +164,7 @@ try {
             'title' => 'Profil Saya',
             'icon' => 'fa-solid fa-user-gear',
             'action' => 'open_profile',
+            'route' => '/admin/profile',
             'badge' => null,
             'sort_order' => 2,
             'roles' => ['user', 'admin', 'superadmin'],
@@ -172,6 +174,7 @@ try {
             'title' => 'Master Data',
             'icon' => 'fa-solid fa-folder-tree',
             'action' => null,
+            'route' => null,
             'badge' => '2',
             'sort_order' => 3,
             'roles' => ['admin', 'superadmin'],
@@ -180,6 +183,7 @@ try {
                     'title' => 'Manajemen Pengguna',
                     'icon' => 'fa-solid fa-users',
                     'action' => 'open_users',
+                    'route' => '/admin/users',
                     'badge' => null,
                     'sort_order' => 1,
                     'roles' => ['admin', 'superadmin'],
@@ -188,6 +192,7 @@ try {
                     'title' => 'Data Peran (Roles)',
                     'icon' => 'fa-solid fa-user-shield',
                     'action' => 'open_roles',
+                    'route' => '/admin/roles',
                     'badge' => null,
                     'sort_order' => 2,
                     'roles' => ['admin', 'superadmin'],
@@ -198,6 +203,7 @@ try {
             'title' => 'Laporan Aktivitas',
             'icon' => 'fa-solid fa-chart-line',
             'action' => 'open_reports',
+            'route' => '/admin/reports',
             'badge' => null,
             'sort_order' => 4,
             'roles' => ['admin', 'superadmin'],
@@ -207,6 +213,7 @@ try {
             'title' => 'Sistem & Konfigurasi',
             'icon' => 'fa-solid fa-server',
             'action' => null,
+            'route' => null,
             'badge' => '2',
             'sort_order' => 5,
             'roles' => ['superadmin'],
@@ -215,6 +222,7 @@ try {
                     'title' => 'Database Explorer',
                     'icon' => 'fa-solid fa-database',
                     'action' => 'open_database',
+                    'route' => '/admin/database',
                     'badge' => null,
                     'sort_order' => 1,
                     'roles' => ['superadmin'],
@@ -223,11 +231,22 @@ try {
                     'title' => 'Pengaturan Sistem',
                     'icon' => 'fa-solid fa-gears',
                     'action' => 'open_settings',
+                    'route' => '/admin/settings',
                     'badge' => null,
                     'sort_order' => 2,
                     'roles' => ['superadmin'],
                 ],
             ],
+        ],
+        [
+            'title' => 'Dokumentasi Framework',
+            'icon' => 'fa-solid fa-book-open',
+            'action' => 'new_tab',
+            'route' => 'https://github.com',
+            'badge' => 'Docs',
+            'sort_order' => 6,
+            'roles' => ['user', 'admin', 'superadmin'],
+            'children' => [],
         ],
     ];
 
@@ -243,19 +262,29 @@ try {
         $existing = $stmt->fetch(\PDO::FETCH_ASSOC);
 
         if (!$existing) {
-            $insert = $pdo->prepare("INSERT INTO menus (parent_id, title, icon, action, badge, sort_order, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, NOW(), NOW())");
+            $insert = $pdo->prepare("INSERT INTO menus (parent_id, title, icon, action, route, badge, sort_order, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())");
             $insert->execute([
                 $parentId,
                 $def['title'],
                 $def['icon'],
-                $def['action'],
-                $def['badge'],
+                $def['action'] ?? null,
+                $def['route'] ?? null,
+                $def['badge'] ?? null,
                 $def['sort_order'],
             ]);
             $menuId = (int) $pdo->lastInsertId();
             echo "[SUCCESS] Menu seeded: " . ($parentId ? "  └─ " : "") . "{$def['title']}\n";
         } else {
             $menuId = (int) $existing['id'];
+            $update = $pdo->prepare("UPDATE menus SET icon = ?, action = ?, route = ?, badge = ?, sort_order = ? WHERE id = ?");
+            $update->execute([
+                $def['icon'],
+                $def['action'] ?? null,
+                $def['route'] ?? null,
+                $def['badge'] ?? null,
+                $def['sort_order'],
+                $menuId,
+            ]);
         }
 
         // Hubungkan role_menu

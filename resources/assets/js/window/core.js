@@ -33,6 +33,7 @@ class WindowCore {
         }, options);
 
         this.container = null;
+        this.actionHandlers = {};
         this.state = {
             initializedAt: new Date(),
             apiStatus: 'unknown',
@@ -89,18 +90,18 @@ class WindowCore {
                 </header>
                 ` : ''}
                 
-                <main id="wd-workspace" class="wd-workspace flex-grow-1 p-4 overflow-auto position-relative">
-                    ini harus tempat window
+                <main id="wd-workspace" class="wd-workspace flex-grow-1 position-relative overflow-hidden">
+                    <div id="wd-snap-preview" class="wd-snap-preview d-none"></div>
                 </main>
 
                 ${(this.options.footer.active) ? `
                 <footer class="bg-primary-subtle border-top">
-                    <div class="d-flex align-items-center gap-2">
+                    <div class="d-flex align-items-stretch gap-1 h-100">
                         <div id="wp-menu" class="wp-menu" style="padding: ${this.options.footer.icons.ypadding ?? '0px'} ${this.options.footer.icons.xpadding ?? '0px'};">
                             <i class="fa-brands fa-microsoft d-block" style="font-size: ${this.options.footer.icons.dimension ?? '0px'};"></i>
                             ${this.options.footer.icons.text ?? ''}
                         </div>
-                        <div class="d-flex align-items-center gap-2" id="wd-active-content">
+                        <div class="d-flex align-items-stretch gap-1 h-100" id="wd-active-content">
                         </div>
                     </div>
                 </footer>
@@ -114,16 +115,17 @@ class WindowCore {
      */
     attachEventListeners() {
         const btnMenu = document.getElementById('wp-menu');
-        if (btnMenu) btnMenu.addEventListener('click', () => this.openMenuWindow());
+        if (btnMenu) btnMenu.addEventListener('click', () => this.openMenuWindow(btnMenu));
     }
 
-    openMenuWindow() {
+    openMenuWindow(btnMenu) {
         const divWorkspace = document.getElementById('wd-workspace');
         if (!divWorkspace) return;
 
         const checkDivExist = divWorkspace.querySelector('#wd-menu-window');
         if (checkDivExist) {
             checkDivExist.remove();
+            btnMenu.classList.remove("wp-menu-active");
             return;
         }
 
@@ -168,6 +170,7 @@ class WindowCore {
         `;
 
         divWorkspace.appendChild(divMenuWindow);
+        btnMenu.classList.add("wp-menu-active");
 
         // Pasang event listener untuk parent collapsible toggles
         divMenuWindow.querySelectorAll('.menu-parent-toggle').forEach(toggleBtn => {
@@ -199,10 +202,25 @@ class WindowCore {
         divMenuWindow.querySelectorAll('.menu-leaf-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const action = btn.getAttribute('data-action');
+                const menuId = parseInt(btn.getAttribute('data-menu-id'), 10);
+                const action = btn.getAttribute('data-action') || '';
                 const title = btn.querySelector('.menu-title')?.innerText || btn.innerText.trim();
-                this.onMenuItemClick(action, title);
+                const route = btn.getAttribute('data-route') || null;
+                const target = btn.getAttribute('data-target') || null;
+                const type = btn.getAttribute('data-type') || null;
+
+                const menuItem = this.findMenu(menuId) || {
+                    id: menuId,
+                    action: action,
+                    title: title,
+                    route: route,
+                    target: target,
+                    type: type,
+                };
+
                 divMenuWindow.remove();
+                btnMenu.classList.remove("wp-menu-active");
+                this.onMenuItemClick(menuItem, e);
             });
 
             btn.addEventListener('mouseenter', () => btn.style.backgroundColor = '#f1f5f9');
@@ -214,6 +232,7 @@ class WindowCore {
             const btnMenu = document.getElementById('wp-menu');
             if (divMenuWindow && !divMenuWindow.contains(e.target) && (!btnMenu || !btnMenu.contains(e.target))) {
                 divMenuWindow.remove();
+                btnMenu.classList.remove("wp-menu-active");
                 document.removeEventListener('click', handleOutsideClick);
             }
         };
@@ -252,7 +271,7 @@ class WindowCore {
                 `;
             } else {
                 return `
-                    <button type="button" class="btn btn-sm text-start d-flex align-items-center justify-content-between px-3 py-2 border-0 rounded text-dark w-100 menu-leaf-btn" style="transition: background 0.15s;" data-menu-id="${item.id}" data-action="${item.action || ''}">
+                    <button type="button" class="btn btn-sm text-start d-flex align-items-center justify-content-between px-3 py-2 border-0 rounded text-dark w-100 menu-leaf-btn" style="transition: background 0.15s;" data-menu-id="${item.id}" data-action="${item.action || ''}" data-route="${item.route || ''}" data-target="${item.target || ''}" data-type="${item.type || ''}">
                         <div class="d-flex align-items-center gap-2 text-truncate">
                             <i class="${item.icon || 'fa-solid fa-circle-dot'} text-primary" style="width: 18px; text-align: center;"></i>
                             <span class="small fw-medium text-truncate menu-title">${item.title}</span>
@@ -265,11 +284,924 @@ class WindowCore {
     }
 
     /**
-     * Handler saat salah satu item menu diklik
+     * Cari objek menu berdasarkan ID atau Action secara rekursif
      */
-    onMenuItemClick(action, title) {
-        console.log(`[WindowCore] Menu clicked: ${title} (${action})`);
-        alert(`Membuka: ${title} [action: ${action}]`);
+    findMenu(idOrAction, items = this.options.menus) {
+        if (!Array.isArray(items)) return null;
+
+        for (const item of items) {
+            if (item.id == idOrAction || item.action === idOrAction) {
+                return item;
+            }
+            if (Array.isArray(item.children) && item.children.length > 0) {
+                const found = this.findMenu(idOrAction, item.children);
+                if (found) return found;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Mendaftarkan custom action handler JavaScript
+     * Contoh: adminApp.registerAction('open_users', (item, app, e) => { ... })
+     */
+    registerAction(actionName, handler) {
+        if (typeof handler === 'function') {
+            this.actionHandlers[actionName] = handler;
+        }
+        return this;
+    }
+
+    /**
+     * Handler utama saat salah satu item menu diklik.
+     * Mendukung 4 mode aksi:
+     * 1. Href / Direct redirect (window.location.href)
+     * 2. Buka tab browser baru (window.open target="_blank")
+     * 3. Buka Window di dalam workspace (#wd-workspace)
+     * 4. Custom JavaScript Event / Callback Handler
+     *
+     * @param {Object|string} itemOrAction Objek menu atau string action identifier
+     * @param {Event|null} event Event DOM asli (opsional)
+     */
+    onMenuItemClick(itemOrAction, event = null) {
+        // Normalisasi input
+        let item = null;
+        if (typeof itemOrAction === 'object' && itemOrAction !== null) {
+            item = itemOrAction;
+        } else if (typeof itemOrAction === 'string' || typeof itemOrAction === 'number') {
+            item = this.findMenu(itemOrAction) || {
+                action: String(itemOrAction),
+                title: String(itemOrAction),
+                route: null
+            };
+        } else {
+            return;
+        }
+
+        const action = item.action || '';
+        const route = item.route || null;
+        const target = item.target || null;
+        const type = item.type || null;
+
+        console.log(`[WindowCore] Menu clicked: "${item.title}" [action: ${action || '-'}, route: ${route || '-'}]`);
+
+        // 1. Trigger Global Custom DOM Event
+        const customEvent = new CustomEvent('syntaxcore:menu-click', {
+            detail: { item, app: this, originalEvent: event },
+            cancelable: true
+        });
+        const notCancelled = document.dispatchEvent(customEvent);
+        if (!notCancelled) {
+            console.log(`[WindowCore] Action for "${item.title}" dibatalkan oleh event listener.`);
+            return;
+        }
+
+        // 2. Hook opsi konfigurasi instansiasi (options.onMenuItemClick)
+        if (typeof this.options.onMenuItemClick === 'function') {
+            const hookResult = this.options.onMenuItemClick(item, this, event);
+            if (hookResult === false) {
+                return; // Dibatalkan oleh callback hook user
+            }
+        }
+
+        // 3. Cek Custom Action Handler yang didaftarkan via registerAction(actionName, fn)
+        if (action && typeof this.actionHandlers[action] === 'function') {
+            this.actionHandlers[action](item, this, event);
+            return;
+        }
+
+        // 4. Deteksi Mode: New Tab, Href, Custom Event, atau Window di Workspace
+
+        // A. MODE BUKA TAB BROWSER BARU
+        const isNewTab = (target === '_blank') ||
+            (type === 'new_tab') ||
+            (action === 'new_tab') ||
+            (action && (action.startsWith('newtab:') || action.startsWith('tab:')));
+        if (isNewTab) {
+            let url = route;
+            if (action && (action.startsWith('newtab:') || action.startsWith('tab:'))) {
+                url = action.split(':')[1];
+            }
+            if (url) {
+                console.log(`[WindowCore] Membuka tab baru: ${url}`);
+                window.open(url, '_blank', 'noopener,noreferrer');
+            } else {
+                console.warn(`[WindowCore] Menu "${item.title}" diset new_tab tetapi URL/route kosong.`);
+            }
+            return;
+        }
+
+        // B. MODE HREF (Redirect halaman di tab saat ini)
+        const isHref = (target === '_self') ||
+            (type === 'href') ||
+            (action === 'href') ||
+            (action && action.startsWith('href:'));
+        if (isHref) {
+            let url = route;
+            if (action && action.startsWith('href:')) {
+                url = action.substring(5);
+            }
+            if (url) {
+                console.log(`[WindowCore] Navigasi halaman ke: ${url}`);
+                window.location.href = url;
+            } else {
+                console.warn(`[WindowCore] Menu "${item.title}" diset href tetapi URL/route kosong.`);
+            }
+            return;
+        }
+
+        // C. MODE CUSTOM EVENT JAVASCRIPT
+        const isCustomEvent = (type === 'event') ||
+            (action && action.startsWith('event:'));
+        if (isCustomEvent) {
+            const eventName = action.startsWith('event:') ? action.substring(6) : (item.event_name || 'syntaxcore:custom-event');
+            console.log(`[WindowCore] Triggering event: ${eventName}`);
+            document.dispatchEvent(new CustomEvent(eventName, {
+                detail: { item, app: this, originalEvent: event }
+            }));
+            return;
+        }
+
+        // D. MODE WINDOW DESKTOP DI DALAM #wd-workspace (DEFAULT)
+        this.openWindow(item);
+    }
+
+    /**
+     * Membuka atau memfokuskan jendela aplikasi di dalam workspace (#wd-workspace).
+     * Struktur container sengaja dibuat unopinionated agar fleksibel dan desain visual bebas ditentukan oleh user.
+     *
+     * @param {Object} item Objek menu yang diklik
+     * @returns {HTMLElement|null} Elemen window yang dibuat atau difokuskan
+     */
+    openWindow(item) {
+        const workspace = document.getElementById('wd-workspace');
+        if (!workspace) {
+            console.warn('[WindowCore] Workspace #wd-workspace tidak ditemukan.');
+            return null;
+        }
+
+        const winId = `wd-win-${item.id || item.action || 'app'}`;
+
+        // Jika window dengan ID ini sudah ada di workspace, bawa ke paling depan (fokus)
+        const existingWin = document.getElementById(winId);
+        if (existingWin) {
+            this.restoreAndFocusWindow(winId);
+            return existingWin;
+        }
+
+        // Buat container window dasar
+        const winEl = document.createElement('div');
+        winEl.id = winId;
+        winEl.className = 'wd-window card shadow position-absolute border';
+        winEl.setAttribute('data-action', item.action || '');
+        winEl.setAttribute('data-route', item.route || '');
+
+        // Posisi default bertingkat (cascade offset)
+        const offset = (this.state.windows.length % 6) * 24 + 30;
+        winEl.style.cssText = `
+            top: ${offset}px;
+            left: ${offset}px;
+            width: 440px;
+            min-height: 250px;
+            height: 250px;
+            z-index: ${100 + this.state.windows.length};
+            background: #ffffff;
+            border-radius: 8px;
+        `;
+        winEl.dataset.prevTop = `${offset}px`;
+        winEl.dataset.prevLeft = `${offset}px`;
+        winEl.dataset.prevWidth = '440px';
+        winEl.dataset.prevHeight = '250px';
+        winEl.dataset.isMaximized = 'false';
+        winEl.dataset.snapState = 'none';
+
+        // Layout dasar unopinionated: Header minimalis dan Body container
+        winEl.innerHTML = `
+            <div class="wd-window-header card-header bg-light d-flex justify-content-between align-items-center py-2 px-3 user-select-none border-bottom" style="cursor: move;">
+                <div class="d-flex align-items-center gap-2 text-truncate me-2">
+                    <i class="${item.icon || 'fa-solid fa-window-maximize'} text-primary small"></i>
+                    <span class="wd-window-title small fw-semibold text-truncate">${item.title || 'Application Window'}</span>
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                    <button type="button" class="btn btn-sm btn-link text-secondary p-0 wd-window-minimize" title="Minimize" style="font-size: 11px; text-decoration: none;">
+                        <i class="fa-solid fa-minus"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-link text-secondary p-0 wd-window-maximize" title="Maximize / Restore" style="font-size: 11px; text-decoration: none;">
+                        <i class="fa-regular fa-square"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-close wd-window-close border-0" aria-label="Close" style="font-size: 10px;"></button>
+                </div>
+            </div>
+            <div class="wd-window-body card-body p-3 overflow-auto" style="min-height: 180px;">
+                <div class="text-muted small">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="fw-bold text-dark">${item.title}</span>
+                        ${item.badge ? `<span class="badge bg-primary-subtle text-primary">${item.badge}</span>` : ''}
+                    </div>
+                    <p class="mb-1 text-secondary">Endpoint Controller: <code>${item.route || 'Tidak ada endpoint'}</code></p>
+                    <p class="mb-0 text-secondary" style="font-size: 11px;">Action: <code>${item.action || '-'}</code></p>
+                </div>
+            </div>
+        `;
+
+        // Pasang event minimize tombol minus
+        winEl.querySelector('.wd-window-minimize')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.minimizeWindow(winId);
+        });
+
+        // Pasang event close tombol 'X'
+        winEl.querySelector('.wd-window-close')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.closeWindow(winId);
+        });
+
+        // Pasang event maximize tombol kotak
+        winEl.querySelector('.wd-window-maximize')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleMaximize(winEl);
+        });
+
+        // Double-click header untuk maximize / restore
+        winEl.querySelector('.wd-window-header')?.addEventListener('dblclick', (e) => {
+            if (!e.target.closest('button, a')) {
+                this.toggleMaximize(winEl);
+            }
+        });
+
+        // Bawa ke depan saat diklik
+        winEl.addEventListener('mousedown', () => {
+            this.focusWindow(winEl);
+        });
+
+        // Aktifkan fitur Drag & Move
+        this.makeDraggable(winEl);
+
+        // Aktifkan fitur Resize
+        this.makeResizable(winEl);
+
+        workspace.appendChild(winEl);
+
+        // Catat instance window ke state
+        this.state.windows.push({
+            id: winId,
+            item: item,
+            element: winEl,
+            openedAt: new Date()
+        });
+
+        // Tambahkan icon window ke toolbar footer di samping tombol menu
+        this.addTaskbarItem(winId, item, winEl);
+
+        // Trigger custom event agar desain UI atau endpoint loader dapat di-hook oleh user
+        document.dispatchEvent(new CustomEvent('syntaxcore:window-open', {
+            detail: { windowElement: winEl, item, app: this }
+        }));
+
+        console.log(`[WindowCore] Window dibuka: "${item.title}" (#${winId})`);
+        return winEl;
+    }
+
+    /**
+     * Mengaktifkan kemampuan Drag & Move pada jendela di dalam workspace.
+     * Mendukung unsnap saat ditarik dari status maximized/snapped,
+     * serta deteksi Aero Snap ke tepi workspace (atas = maximize, kiri = 50%, kanan = 50%).
+     * 
+     * @param {HTMLElement} winEl Elemen window
+     */
+    makeDraggable(winEl) {
+        const header = winEl.querySelector('.wd-window-header');
+        if (!header) return;
+
+        let isDragging = false;
+        let startX = 0;
+        let startY = 0;
+        let initialLeft = 0;
+        let initialTop = 0;
+        let snapTarget = null;
+        let wasSnapped = false;
+        let hasUnsnapped = false;
+
+        const onMouseDown = (e) => {
+            // Abaikan jika klik pada tombol kontrol atau elemen interaktif
+            if (e.target.closest('.wd-window-close, .wd-window-maximize, button, a, input, select')) {
+                return;
+            }
+
+            e.preventDefault();
+            this.focusWindow(winEl);
+
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            initialLeft = winEl.offsetLeft;
+            initialTop = winEl.offsetTop;
+            snapTarget = null;
+            wasSnapped = (winEl.dataset.snapState && winEl.dataset.snapState !== 'none') || (winEl.dataset.isMaximized === 'true');
+            hasUnsnapped = false;
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        };
+
+        const onMouseMove = (e) => {
+            if (!isDragging) return;
+
+            const workspace = document.getElementById('wd-workspace');
+            if (!workspace) return;
+
+            const deltaX = e.clientX - startX;
+            const deltaY = e.clientY - startY;
+
+            // Unsnap jika jendela sedang dalam status maximized / snapped dan user mulai menggeser
+            if (wasSnapped && !hasUnsnapped) {
+                if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) {
+                    const prevWidth = parseFloat(winEl.dataset.prevWidth) || 440;
+                    const prevHeight = parseFloat(winEl.dataset.prevHeight) || 250;
+                    const currentWidth = winEl.offsetWidth;
+
+                    // Hitung rasio posisi horizontal kursor relatif terhadap header saat ini
+                    const headerRect = header.getBoundingClientRect();
+                    const cursorOffsetX = e.clientX - headerRect.left;
+                    const ratio = currentWidth > 0 ? Math.min(1, Math.max(0, cursorOffsetX / currentWidth)) : 0.5;
+
+                    winEl.classList.remove('wd-window-snapping');
+                    winEl.style.width = `${prevWidth}px`;
+                    winEl.style.height = `${prevHeight}px`;
+                    winEl.style.borderRadius = '8px';
+                    winEl.dataset.isMaximized = 'false';
+                    winEl.dataset.snapState = 'none';
+
+                    const icon = winEl.querySelector('.wd-window-maximize i');
+                    if (icon) icon.className = 'fa-regular fa-square';
+
+                    // Hitung posisi window baru agar kursor tetap menempel pada posisi proporsional header
+                    const wsRect = workspace.getBoundingClientRect();
+                    const mouseWsX = e.clientX - wsRect.left;
+                    const mouseWsY = e.clientY - wsRect.top;
+
+                    let restoredLeft = mouseWsX - (prevWidth * ratio);
+                    let restoredTop = Math.max(0, mouseWsY - 15);
+
+                    const maxLeft = Math.max(0, workspace.clientWidth - 80);
+                    const maxTop = Math.max(0, workspace.clientHeight - 40);
+                    restoredLeft = Math.max(0, Math.min(restoredLeft, maxLeft));
+                    restoredTop = Math.max(0, Math.min(restoredTop, maxTop));
+
+                    winEl.style.left = `${restoredLeft}px`;
+                    winEl.style.top = `${restoredTop}px`;
+
+                    initialLeft = restoredLeft;
+                    initialTop = restoredTop;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    hasUnsnapped = true;
+                    wasSnapped = false;
+                    return;
+                } else {
+                    return;
+                }
+            }
+
+            let newLeft = initialLeft + (e.clientX - startX);
+            let newTop = initialTop + (e.clientY - startY);
+
+            const maxLeft = Math.max(0, workspace.clientWidth - 80);
+            const maxTop = Math.max(0, workspace.clientHeight - 40);
+            newLeft = Math.max(0, Math.min(newLeft, maxLeft));
+            newTop = Math.max(0, Math.min(newTop, maxTop));
+
+            winEl.style.left = `${newLeft}px`;
+            winEl.style.top = `${newTop}px`;
+
+            // Deteksi batas workspace untuk Aero Snap Ghost Preview
+            const wsRect = workspace.getBoundingClientRect();
+            const SNAP_THRESHOLD = 20;
+
+            if (e.clientY <= wsRect.top + SNAP_THRESHOLD) {
+                snapTarget = 'top';
+            } else if (e.clientX <= wsRect.left + SNAP_THRESHOLD) {
+                snapTarget = 'left';
+            } else if (e.clientX >= wsRect.right - SNAP_THRESHOLD) {
+                snapTarget = 'right';
+            } else {
+                snapTarget = null;
+            }
+
+            this.updateSnapPreview(snapTarget);
+        };
+
+        const onMouseUp = () => {
+            isDragging = false;
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+
+            this.hideSnapPreview();
+
+            if (snapTarget) {
+                this.snapWindow(winEl, snapTarget);
+                snapTarget = null;
+            } else {
+                // Simpan koordinat baru jika dilepas dalam keadaan floating normal
+                winEl.dataset.prevTop = `${winEl.offsetTop}px`;
+                winEl.dataset.prevLeft = `${winEl.offsetLeft}px`;
+            }
+        };
+
+        header.addEventListener('mousedown', onMouseDown);
+    }
+
+    /**
+     * Mengaktifkan kemampuan Resize 8 arah (Desktop-style border resize) pada jendela di dalam workspace
+     * 
+     * @param {HTMLElement} winEl Elemen window
+     */
+    makeResizable(winEl) {
+        // Buat 8 border resize handles: 4 tepi (n, s, e, w) dan 4 sudut (nw, ne, sw, se)
+        const directions = ['n', 's', 'e', 'w', 'nw', 'ne', 'sw', 'se'];
+        directions.forEach(dir => {
+            const handle = document.createElement('div');
+            handle.className = `wd-resize-handle wd-resize-handle-${dir}`;
+            handle.dataset.direction = dir;
+            winEl.appendChild(handle);
+            handle.addEventListener('mousedown', (e) => initResize(e, dir));
+        });
+
+        const initResize = (e, direction) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            // Nonaktifkan resize jika sedang maximized atau dalam status snap
+            const isMaximized = winEl.dataset.isMaximized === 'true';
+            const snapState = winEl.dataset.snapState || 'none';
+            if (isMaximized || snapState !== 'none') {
+                return;
+            }
+
+            this.focusWindow(winEl);
+
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const startWidth = winEl.offsetWidth;
+            const startHeight = winEl.offsetHeight;
+            const startLeft = winEl.offsetLeft;
+            const startTop = winEl.offsetTop;
+            const minWidth = 260;
+            const minHeight = 150;
+            const workspace = document.getElementById('wd-workspace');
+
+            // Kunci cursor global saat dragging agar tidak flicker saat mouse bergerak cepat
+            const cursorMap = {
+                'n': 'ns-resize',
+                's': 'ns-resize',
+                'e': 'ew-resize',
+                'w': 'ew-resize',
+                'nw': 'nwse-resize',
+                'se': 'nwse-resize',
+                'ne': 'nesw-resize',
+                'sw': 'nesw-resize'
+            };
+            const originalCursor = document.body.style.cursor;
+            document.body.style.cursor = cursorMap[direction] || 'default';
+            document.body.style.userSelect = 'none';
+
+            const onMouseMove = (moveEvent) => {
+                const deltaX = moveEvent.clientX - startX;
+                const deltaY = moveEvent.clientY - startY;
+
+                const wsWidth = workspace ? workspace.clientWidth : window.innerWidth;
+                const wsHeight = workspace ? workspace.clientHeight : window.innerHeight;
+
+                // --- 1. Horizontal Resizing ---
+                if (direction.includes('e')) {
+                    // Sisi Timur (Kanan): Melebarkan ke kanan
+                    let newWidth = Math.max(minWidth, startWidth + deltaX);
+                    const maxWidth = wsWidth - startLeft;
+                    newWidth = Math.min(newWidth, Math.max(minWidth, maxWidth));
+                    winEl.style.width = `${newWidth}px`;
+                } else if (direction.includes('w')) {
+                    // Sisi Barat (Kiri): Melebarkan ke kiri dan menggeser left coordinate
+                    let newWidth = startWidth - deltaX;
+                    let newLeft = startLeft + deltaX;
+
+                    if (newWidth < minWidth) {
+                        newLeft = startLeft + (startWidth - minWidth);
+                        newWidth = minWidth;
+                    }
+                    if (newLeft < 0) {
+                        newWidth = newWidth + newLeft;
+                        newLeft = 0;
+                    }
+                    winEl.style.width = `${newWidth}px`;
+                    winEl.style.left = `${newLeft}px`;
+                }
+
+                // --- 2. Vertical Resizing ---
+                if (direction.includes('s')) {
+                    // Sisi Selatan (Bawah): Meninggikan ke bawah
+                    let newHeight = Math.max(minHeight, startHeight + deltaY);
+                    const maxHeight = wsHeight - startTop;
+                    newHeight = Math.min(newHeight, Math.max(minHeight, maxHeight));
+                    winEl.style.height = `${newHeight}px`;
+                } else if (direction.includes('n')) {
+                    // Sisi Utara (Atas): Meninggikan ke atas dan menggeser top coordinate
+                    let newHeight = startHeight - deltaY;
+                    let newTop = startTop + deltaY;
+
+                    if (newHeight < minHeight) {
+                        newTop = startTop + (startHeight - minHeight);
+                        newHeight = minHeight;
+                    }
+                    if (newTop < 0) {
+                        newHeight = newHeight + newTop;
+                        newTop = 0;
+                    }
+                    winEl.style.height = `${newHeight}px`;
+                    winEl.style.top = `${newTop}px`;
+                }
+            };
+
+            const onMouseUp = () => {
+                document.body.style.cursor = originalCursor;
+                document.body.style.userSelect = '';
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+
+                // Perbarui ukuran memori pre-snap agar saat maximize-restore memakai dimensi baru
+                winEl.dataset.prevWidth = `${winEl.offsetWidth}px`;
+                winEl.dataset.prevHeight = `${winEl.offsetHeight}px`;
+                winEl.dataset.prevTop = `${winEl.offsetTop}px`;
+                winEl.dataset.prevLeft = `${winEl.offsetLeft}px`;
+            };
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        };
+    }
+
+    /**
+     * Mendapatkan atau membuat elemen Ghost Preview untuk Aero Snapping
+     * 
+     * @returns {HTMLElement|null}
+     */
+    getSnapPreview() {
+        const workspace = document.getElementById('wd-workspace');
+        if (!workspace) return null;
+        let preview = workspace.querySelector('#wd-snap-preview');
+        if (!preview) {
+            preview = document.createElement('div');
+            preview.id = 'wd-snap-preview';
+            preview.className = 'wd-snap-preview d-none';
+            workspace.appendChild(preview);
+        }
+        return preview;
+    }
+
+    /**
+     * Memperbarui posisi dan bentuk tampilan Aero Snap Ghost Preview
+     * 
+     * @param {'top'|'left'|'right'|null} snapTarget
+     */
+    updateSnapPreview(snapTarget) {
+        const preview = this.getSnapPreview();
+        if (!preview) return;
+
+        if (!snapTarget) {
+            preview.classList.add('d-none');
+            return;
+        }
+
+        preview.classList.remove('d-none');
+        if (snapTarget === 'top') {
+            preview.style.top = '0px';
+            preview.style.left = '0px';
+            preview.style.width = '100%';
+            preview.style.height = '100%';
+            preview.style.borderRadius = '0px';
+        } else if (snapTarget === 'left') {
+            preview.style.top = '0px';
+            preview.style.left = '0px';
+            preview.style.width = '50%';
+            preview.style.height = '100%';
+            preview.style.borderRadius = '0px';
+        } else if (snapTarget === 'right') {
+            preview.style.top = '0px';
+            preview.style.left = '50%';
+            preview.style.width = '50%';
+            preview.style.height = '100%';
+            preview.style.borderRadius = '0px';
+        }
+    }
+
+    /**
+     * Menyembunyikan tampilan Ghost Preview
+     */
+    hideSnapPreview() {
+        const preview = this.getSnapPreview();
+        if (preview) {
+            preview.classList.add('d-none');
+        }
+    }
+
+    /**
+     * Snap window ke posisi tertentu (top/maximize, left half, right half)
+     * 
+     * @param {HTMLElement} winEl Elemen window
+     * @param {'top'|'left'|'right'} position Posisi snapping
+     */
+    snapWindow(winEl, position) {
+        if (!winEl) return;
+        this.focusWindow(winEl);
+
+        const icon = winEl.querySelector('.wd-window-maximize i');
+        const currentSnap = winEl.dataset.snapState || 'none';
+        const isMaximized = winEl.dataset.isMaximized === 'true';
+
+        // Simpan ukuran dan posisi sebelumnya hanya jika belum dalam status snapped / maximized
+        if (currentSnap === 'none' && !isMaximized) {
+            winEl.dataset.prevTop = winEl.style.top || `${winEl.offsetTop}px`;
+            winEl.dataset.prevLeft = winEl.style.left || `${winEl.offsetLeft}px`;
+            winEl.dataset.prevWidth = winEl.style.width || `${winEl.offsetWidth}px`;
+            winEl.dataset.prevHeight = winEl.style.height || `${winEl.offsetHeight}px`;
+        }
+
+        // Aktifkan transisi halus snapping
+        winEl.classList.add('wd-window-snapping');
+        setTimeout(() => winEl.classList.remove('wd-window-snapping'), 180);
+
+        winEl.dataset.snapState = position;
+
+        if (position === 'top') {
+            winEl.dataset.isMaximized = 'true';
+            winEl.style.top = '0px';
+            winEl.style.left = '0px';
+            winEl.style.width = '100%';
+            winEl.style.height = '100%';
+            winEl.style.borderRadius = '0px';
+            if (icon) icon.className = 'fa-regular fa-clone';
+        } else if (position === 'left') {
+            winEl.dataset.isMaximized = 'false';
+            winEl.style.top = '0px';
+            winEl.style.left = '0px';
+            winEl.style.width = '50%';
+            winEl.style.height = '100%';
+            winEl.style.borderRadius = '0px';
+            if (icon) icon.className = 'fa-regular fa-square';
+        } else if (position === 'right') {
+            winEl.dataset.isMaximized = 'false';
+            winEl.style.top = '0px';
+            winEl.style.left = '50%';
+            winEl.style.width = '50%';
+            winEl.style.height = '100%';
+            winEl.style.borderRadius = '0px';
+            if (icon) icon.className = 'fa-regular fa-square';
+        }
+
+        document.dispatchEvent(new CustomEvent('syntaxcore:window-snap', {
+            detail: { windowElement: winEl, position, app: this }
+        }));
+    }
+
+    /**
+     * Restore ukuran dan posisi window ke kondisi sebelum di-maximize atau di-snap
+     * 
+     * @param {HTMLElement} winEl Elemen window
+     */
+    restoreWindow(winEl) {
+        if (!winEl) return;
+        this.focusWindow(winEl);
+
+        const icon = winEl.querySelector('.wd-window-maximize i');
+
+        winEl.classList.add('wd-window-snapping');
+        setTimeout(() => winEl.classList.remove('wd-window-snapping'), 180);
+
+        winEl.style.top = winEl.dataset.prevTop || '30px';
+        winEl.style.left = winEl.dataset.prevLeft || '30px';
+        winEl.style.width = winEl.dataset.prevWidth || '440px';
+        winEl.style.height = winEl.dataset.prevHeight || '250px';
+        winEl.style.borderRadius = '8px';
+        winEl.dataset.isMaximized = 'false';
+        winEl.dataset.snapState = 'none';
+
+        if (icon) icon.className = 'fa-regular fa-square';
+
+        document.dispatchEvent(new CustomEvent('syntaxcore:window-restore', {
+            detail: { windowElement: winEl, app: this }
+        }));
+    }
+
+    /**
+     * Toggle maximize dan restore ukuran window
+     * 
+     * @param {HTMLElement} winEl Elemen window
+     */
+    toggleMaximize(winEl) {
+        if (!winEl) return;
+        const isMax = winEl.dataset.isMaximized === 'true' || winEl.dataset.snapState === 'top';
+        if (isMax) {
+            this.restoreWindow(winEl);
+        } else {
+            this.snapWindow(winEl, 'top');
+        }
+    }
+
+    /**
+     * Bawa window ke posisi paling depan (teratas) dan tandai aktif di toolbar footer
+     * 
+     * @param {HTMLElement} winEl Elemen window
+     */
+    focusWindow(winEl) {
+        if (!winEl) return;
+
+        // Pastikan window tidak dalam status minimized saat difokuskan
+        if (winEl.dataset.isMinimized === 'true') {
+            winEl.classList.remove('d-none');
+            winEl.dataset.isMinimized = 'false';
+            const taskbarItem = document.getElementById(`wd-taskbar-${winEl.id}`);
+            if (taskbarItem) {
+                taskbarItem.classList.remove('minimized');
+            }
+        }
+
+        const highestZ = Math.max(100, ...this.state.windows.map(w => parseInt(w.element?.style.zIndex || 100, 10)));
+        winEl.style.zIndex = highestZ + 1;
+
+        // Update active indicator di taskbar footer
+        this.updateTaskbarActive(winEl.id);
+
+        document.dispatchEvent(new CustomEvent('syntaxcore:window-focus', {
+            detail: { windowElement: winEl, winId: winEl.id, app: this }
+        }));
+    }
+
+    /**
+     * Tutup window tertentu berdasarkan ID dan bersihkan icon dari toolbar footer
+     * 
+     * @param {string} winId ID window
+     */
+    closeWindow(winId) {
+        const winEl = document.getElementById(winId);
+        if (winEl) {
+            winEl.remove();
+        }
+        this.state.windows = this.state.windows.filter(w => w.id !== winId);
+
+        // Hapus icon dari toolbar footer
+        this.removeTaskbarItem(winId);
+
+        document.dispatchEvent(new CustomEvent('syntaxcore:window-close', {
+            detail: { winId, app: this }
+        }));
+    }
+
+    /**
+     * Minimize window (sembunyikan ke toolbar footer)
+     * 
+     * @param {string} winId ID window
+     */
+    minimizeWindow(winId) {
+        const winEl = document.getElementById(winId);
+        if (!winEl) return;
+
+        winEl.classList.add('d-none');
+        winEl.dataset.isMinimized = 'true';
+
+        const taskbarItem = document.getElementById(`wd-taskbar-${winId}`);
+        if (taskbarItem) {
+            taskbarItem.classList.remove('active');
+            taskbarItem.classList.add('minimized');
+        }
+
+        // Fokuskan window lain yang masih terlihat (jika ada)
+        const visibleWindows = this.state.windows
+            .filter(w => w.id !== winId && w.element && w.element.dataset.isMinimized !== 'true')
+            .sort((a, b) => parseInt(b.element.style.zIndex || 0, 10) - parseInt(a.element.style.zIndex || 0, 10));
+
+        if (visibleWindows.length > 0) {
+            this.focusWindow(visibleWindows[0].element);
+        } else {
+            this.updateTaskbarActive(null);
+        }
+
+        document.dispatchEvent(new CustomEvent('syntaxcore:window-minimize', {
+            detail: { windowElement: winEl, winId, app: this }
+        }));
+    }
+
+    /**
+     * Tampilkan dan fokuskan window yang diminimize atau berada di background
+     * 
+     * @param {string} winId ID window
+     */
+    restoreAndFocusWindow(winId) {
+        const winEl = document.getElementById(winId);
+        if (!winEl) return;
+
+        if (winEl.dataset.isMinimized === 'true') {
+            winEl.classList.remove('d-none');
+            winEl.dataset.isMinimized = 'false';
+            const taskbarItem = document.getElementById(`wd-taskbar-${winId}`);
+            if (taskbarItem) {
+                taskbarItem.classList.remove('minimized');
+            }
+        }
+
+        this.focusWindow(winEl);
+    }
+
+    /**
+     * Tambahkan icon window aktif ke toolbar footer (#wd-active-content) di sebelah tombol menu
+     * 
+     * @param {string} winId ID window
+     * @param {Object} item Data menu / window
+     * @param {HTMLElement} winEl Elemen DOM window
+     */
+    addTaskbarItem(winId, item, winEl) {
+        const taskbarContainer = document.getElementById('wd-active-content');
+        if (!taskbarContainer) return;
+
+        let taskbarItem = document.getElementById(`wd-taskbar-${winId}`);
+        if (!taskbarItem) {
+            taskbarItem = document.createElement('div');
+            taskbarItem.id = `wd-taskbar-${winId}`;
+            taskbarItem.className = 'wd-taskbar-item active';
+            taskbarItem.setAttribute('data-win-id', winId);
+            taskbarItem.title = item.title || 'Window';
+
+            const iconClass = item.icon || 'fa-solid fa-window-maximize';
+
+            taskbarItem.innerHTML = `
+                <i class="${iconClass}"></i>
+                <span class="wd-taskbar-title small text-truncate" style="max-width: 120px;">${item.title || 'App'}</span>
+            `;
+
+            taskbarItem.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isCurrentlyActive = taskbarItem.classList.contains('active') && winEl.dataset.isMinimized !== 'true';
+                if (isCurrentlyActive) {
+                    // Jika window sedang aktif dan terdepan, klik pada taskbar akan me-minimize
+                    this.minimizeWindow(winId);
+                } else {
+                    // Jika window sedang di background atau minimized, klik akan menampilkan & memfokuskannya
+                    this.restoreAndFocusWindow(winId);
+                }
+            });
+
+            taskbarContainer.appendChild(taskbarItem);
+        }
+
+        this.updateTaskbarActive(winId);
+
+        document.dispatchEvent(new CustomEvent('syntaxcore:taskbar-add', {
+            detail: { winId, item, taskbarElement: taskbarItem, app: this }
+        }));
+    }
+
+    /**
+     * Hapus icon dari toolbar footer saat window ditutup
+     * 
+     * @param {string} winId ID window
+     */
+    removeTaskbarItem(winId) {
+        const taskbarItem = document.getElementById(`wd-taskbar-${winId}`);
+        if (taskbarItem) {
+            taskbarItem.remove();
+        }
+
+        // Jika masih ada window lain yang terbuka dan tidak minimized, fokuskan window teratas
+        const remainingWindows = this.state.windows
+            .filter(w => w.id !== winId && w.element && w.element.dataset.isMinimized !== 'true')
+            .sort((a, b) => parseInt(b.element.style.zIndex || 0, 10) - parseInt(a.element.style.zIndex || 0, 10));
+
+        if (remainingWindows.length > 0) {
+            this.focusWindow(remainingWindows[0].element);
+        } else {
+            this.updateTaskbarActive(null);
+        }
+
+        document.dispatchEvent(new CustomEvent('syntaxcore:taskbar-remove', {
+            detail: { winId, app: this }
+        }));
+    }
+
+    /**
+     * Perbarui penanda status aktif pada icon taskbar di footer
+     * 
+     * @param {string|null} activeWinId ID window yang sedang aktif
+     */
+    updateTaskbarActive(activeWinId) {
+        const taskbarContainer = document.getElementById('wd-active-content');
+        if (!taskbarContainer) return;
+
+        taskbarContainer.querySelectorAll('.wd-taskbar-item').forEach(item => {
+            if (activeWinId && item.getAttribute('data-win-id') === activeWinId) {
+                item.classList.add('active');
+                item.classList.remove('minimized');
+            } else {
+                item.classList.remove('active');
+            }
+        });
     }
 
     /**
