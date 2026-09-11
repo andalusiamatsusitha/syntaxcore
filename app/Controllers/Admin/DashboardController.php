@@ -26,6 +26,9 @@ class DashboardController extends Controller
 
         return $this->view([
             'user' => $user,
+            'role' => $user?->role(),
+            'roleName' => $user?->role()?->name ?? 'Administrator',
+            'roleSlug' => $user?->roleSlug() ?? 'admin',
             'appName' => 'SyntaxCore',
             'menus' => $menus,
         ]);
@@ -44,7 +47,9 @@ class DashboardController extends Controller
             'user' => [
                 'name' => $user?->name,
                 'email' => $user?->email,
-                'role' => $user?->role ?? $user?->level ?? 'admin',
+                'role' => $user?->roleSlug() ?? 'admin',
+                'role_name' => $user?->role()?->name ?? 'Administrator',
+                'level' => $user?->roleLevel() ?? 1,
             ],
             'menus' => $menus,
         ]);

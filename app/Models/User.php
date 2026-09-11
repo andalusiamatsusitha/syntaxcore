@@ -13,9 +13,12 @@ class User extends Model
         'name',
         'email',
         'password',
+        'role_id',
         'created_at',
         'updated_at',
     ];
+
+    protected ?Role $cachedRole = null;
 
     /**
      * Find a user by their email address.
@@ -24,6 +27,55 @@ class User extends Model
     {
         $results = static::where('email', '=', $email);
         return $results[0] ?? null;
+    }
+
+    /**
+     * Get the associated Role model.
+     */
+    public function role(): ?Role
+    {
+        if ($this->cachedRole !== null) {
+            return $this->cachedRole;
+        }
+
+        if (empty($this->role_id)) {
+            return null;
+        }
+
+        return $this->cachedRole = Role::find($this->role_id);
+    }
+
+    /**
+     * Get the role slug string (e.g. 'superadmin', 'admin', 'user').
+     */
+    public function roleSlug(): string
+    {
+        return $this->role()?->slug ?? 'user';
+    }
+
+    /**
+     * Get numeric user level (higher number = higher permission).
+     */
+    public function roleLevel(): int
+    {
+        return (int) ($this->role()?->level ?? 1);
+    }
+
+    /**
+     * Check if the user matches one or more role slugs.
+     */
+    public function hasRole(string|array $roles): bool
+    {
+        $roles = (array) $roles;
+        return in_array($this->roleSlug(), $roles, true);
+    }
+
+    /**
+     * Check if user meets or exceeds a minimum numeric level.
+     */
+    public function hasMinLevel(int $minLevel): bool
+    {
+        return $this->roleLevel() >= $minLevel;
     }
 
     /**
@@ -53,6 +105,9 @@ class User extends Model
     {
         $attributes = parent::toArray();
         unset($attributes['password']);
+        $attributes['role'] = $this->role()?->toArray();
+        $attributes['role_slug'] = $this->roleSlug();
+        $attributes['role_name'] = $this->role()?->name ?? 'User';
         return $attributes;
     }
 }

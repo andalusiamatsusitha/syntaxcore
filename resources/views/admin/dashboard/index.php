@@ -45,6 +45,8 @@
             window.adminApp = new Core("init", {
                 userName: "<?= htmlspecialchars($user?->name ?? 'Administrator') ?>",
                 userEmail: "<?= htmlspecialchars($user?->email ?? '') ?>",
+                userRole: "<?= htmlspecialchars($roleName ?? 'Administrator') ?>",
+                roleSlug: "<?= htmlspecialchars($roleSlug ?? 'admin') ?>",
                 menus: <?= json_encode($menus ?? []) ?>
             });
         });

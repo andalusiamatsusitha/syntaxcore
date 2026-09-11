@@ -18,6 +18,8 @@ class WindowCore {
             containerId: 'wd-content',
             title: 'SyntaxCore Dynamic Window',
             header: true,
+            userRole: 'Administrator',
+            roleSlug: 'admin',
             menus: [],
             footer: {
                 active: true,
@@ -127,44 +129,78 @@ class WindowCore {
 
         const divMenuWindow = document.createElement('div');
         divMenuWindow.id = 'wd-menu-window';
-        divMenuWindow.className = 'wd-menu-window card shadow-lg position-absolute border';
-        divMenuWindow.style.bottom = '10px';
-        divMenuWindow.style.left = '10px';
-        divMenuWindow.style.width = '280px';
-        divMenuWindow.style.zIndex = '1050';
-        divMenuWindow.style.borderRadius = '8px';
+        divMenuWindow.className = 'wd-menu-window card shadow-lg position-absolute border-0';
+        divMenuWindow.style.cssText = `
+            bottom: 10px;
+            left: 10px;
+            width: 300px;
+            max-height: 520px;
+            z-index: 1050;
+            border-radius: 10px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        `;
 
-        // Ambil daftar menu yang sudah difilter oleh backend sesuai level pengguna
+        // Ambil pohon menu yang sudah disusun oleh backend
         const menus = Array.isArray(this.options.menus) ? this.options.menus : [];
-
-        const menuItemsHtml = (menus.length > 0)
-            ? menus.map(item => `
-                <button type="button" class="btn btn-sm text-start d-flex align-items-center gap-2 px-3 py-2 border-0 rounded text-dark" style="transition: background 0.15s;" data-menu-id="${item.id}" data-action="${item.action}">
-                    <i class="${item.icon} text-primary" style="width: 20px; text-align: center;"></i>
-                    <span class="small fw-medium">${item.title}</span>
-                </button>
-            `).join('')
+        const menuTreeHtml = (menus.length > 0)
+            ? this.renderMenuTree(menus)
             : '<div class="p-3 text-muted small text-center">Tidak ada menu untuk level akun ini</div>';
 
         divMenuWindow.innerHTML = `
-            <div class="card-header bg-dark text-white py-2 px-3 d-flex justify-content-between align-items-center rounded-top">
-                <span class="small fw-bold"><i class="fa-solid fa-layer-group me-1"></i> Applications</span>
-                <span class="badge bg-primary" style="font-size: 10px;">${this.options.userName || 'User'}</span>
+            <div class="card-header bg-dark text-white py-2 px-3 d-flex justify-content-between align-items-center rounded-top border-0">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="fa-solid fa-circle-user text-primary fs-5"></i>
+                    <div class="overflow-hidden">
+                        <div class="fw-bold small text-truncate" style="max-width: 150px;">${this.options.userName || 'User'}</div>
+                        <div class="text-white-50 lh-1" style="font-size: 10px;">${this.options.userRole || 'Role'}</div>
+                    </div>
+                </div>
+                <span class="badge bg-primary" style="font-size: 10px; text-transform: uppercase;">${this.options.roleSlug || 'user'}</span>
             </div>
-            <div class="card-body p-2 bg-white">
+            <div class="card-body p-2 bg-white" style="overflow-y: auto; max-height: 440px;">
                 <div id="wp-menu-list" class="d-flex flex-column gap-1">
-                    ${menuItemsHtml}
+                    ${menuTreeHtml}
                 </div>
             </div>
         `;
 
         divWorkspace.appendChild(divMenuWindow);
 
-        // Pasang event listener saat item menu diklik
-        divMenuWindow.querySelectorAll('[data-menu-id]').forEach(btn => {
-            btn.addEventListener('click', () => {
+        // Pasang event listener untuk parent collapsible toggles
+        divMenuWindow.querySelectorAll('.menu-parent-toggle').forEach(toggleBtn => {
+            toggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const parentGroup = toggleBtn.closest('.menu-group');
+                const childrenContainer = parentGroup?.querySelector(':scope > .menu-children');
+                const chevron = toggleBtn.querySelector('.chevron-icon');
+
+                if (childrenContainer) {
+                    const isClosed = childrenContainer.classList.contains('d-none');
+                    if (isClosed) {
+                        childrenContainer.classList.remove('d-none');
+                        childrenContainer.classList.add('d-flex');
+                        if (chevron) chevron.style.transform = 'rotate(90deg)';
+                    } else {
+                        childrenContainer.classList.add('d-none');
+                        childrenContainer.classList.remove('d-flex');
+                        if (chevron) chevron.style.transform = 'rotate(0deg)';
+                    }
+                }
+            });
+
+            toggleBtn.addEventListener('mouseenter', () => toggleBtn.style.backgroundColor = '#f1f5f9');
+            toggleBtn.addEventListener('mouseleave', () => toggleBtn.style.backgroundColor = 'transparent');
+        });
+
+        // Pasang event listener saat leaf menu item diklik
+        divMenuWindow.querySelectorAll('.menu-leaf-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
                 const action = btn.getAttribute('data-action');
-                const title = btn.querySelector('span')?.innerText || action;
+                const title = btn.querySelector('.menu-title')?.innerText || btn.innerText.trim();
                 this.onMenuItemClick(action, title);
                 divMenuWindow.remove();
             });
@@ -182,6 +218,50 @@ class WindowCore {
             }
         };
         setTimeout(() => document.addEventListener('click', handleOutsideClick), 10);
+    }
+
+    /**
+     * Render rekursif untuk struktur pohon menu bertingkat
+     */
+    renderMenuTree(items, level = 0) {
+        if (!Array.isArray(items) || items.length === 0) {
+            return '';
+        }
+
+        return items.map(item => {
+            const hasChildren = Array.isArray(item.children) && item.children.length > 0;
+
+            if (hasChildren) {
+                const subItemsHtml = this.renderMenuTree(item.children, level + 1);
+                return `
+                    <div class="menu-group" data-menu-id="${item.id}">
+                        <button type="button" class="btn btn-sm text-start d-flex align-items-center justify-content-between px-3 py-2 border-0 rounded text-dark w-100 menu-parent-toggle" style="transition: background 0.15s;">
+                            <div class="d-flex align-items-center gap-2 text-truncate">
+                                <i class="${item.icon || 'fa-solid fa-folder'} text-primary" style="width: 18px; text-align: center;"></i>
+                                <span class="small fw-semibold text-truncate">${item.title}</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-1 ms-2">
+                                ${item.badge ? `<span class="badge bg-secondary-subtle text-secondary" style="font-size: 10px;">${item.badge}</span>` : ''}
+                                <i class="fa-solid fa-chevron-right text-muted chevron-icon" style="font-size: 10px; transition: transform 0.2s ease;"></i>
+                            </div>
+                        </button>
+                        <div class="menu-children ps-2 d-none flex-column gap-1 my-1 border-start border-2 ms-3 border-light-subtle">
+                            ${subItemsHtml}
+                        </div>
+                    </div>
+                `;
+            } else {
+                return `
+                    <button type="button" class="btn btn-sm text-start d-flex align-items-center justify-content-between px-3 py-2 border-0 rounded text-dark w-100 menu-leaf-btn" style="transition: background 0.15s;" data-menu-id="${item.id}" data-action="${item.action || ''}">
+                        <div class="d-flex align-items-center gap-2 text-truncate">
+                            <i class="${item.icon || 'fa-solid fa-circle-dot'} text-primary" style="width: 18px; text-align: center;"></i>
+                            <span class="small fw-medium text-truncate menu-title">${item.title}</span>
+                        </div>
+                        ${item.badge ? `<span class="badge bg-primary-subtle text-primary ms-2" style="font-size: 10px;">${item.badge}</span>` : ''}
+                    </button>
+                `;
+            }
+        }).join('');
     }
 
     /**
