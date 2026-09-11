@@ -742,6 +742,324 @@ class DashboardController extends Controller
     }
 
     /**
+     * Endpoint Profil Pengguna Saat Ini (GET /admin/profile)
+     */
+    public function profile(Request $request): Response
+    {
+        /** @var \App\Models\User|null $user */
+        $user = $this->auth->user();
+        if (!$user) {
+            return $this->json([
+                'status' => 'error',
+                'message' => 'Sesi tidak valid atau telah berakhir.',
+            ], 401);
+        }
+
+        // Ambil 5 log aktivitas terakhir milik pengguna ini
+        $recentLogs = \Core\Database\Connection::select(
+            "SELECT id, action, description, ip_address, created_at 
+             FROM `activity_logs` 
+             WHERE `user_id` = ? 
+             ORDER BY `id` DESC LIMIT 5",
+            [$user->id]
+        );
+
+        return $this->json([
+            'status' => 'success',
+            'user' => [
+                'id' => (int) $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->roleSlug(),
+                'role_name' => $user->role()?->name ?? 'User',
+                'level' => $user->roleLevel(),
+                'created_at' => $user->created_at ?? date('Y-m-d H:i:s'),
+            ],
+            'recent_activities' => array_map(function ($l) {
+                return [
+                    'id' => (int) $l['id'],
+                    'action' => $l['action'],
+                    'description' => $l['description'],
+                    'ip_address' => $l['ip_address'],
+                    'created_at' => $l['created_at'],
+                ];
+            }, $recentLogs),
+        ]);
+    }
+
+    /**
+     * Update Profil Pengguna Saat Ini (PUT /admin/profile)
+     */
+    public function updateProfile(Request $request): Response
+    {
+        /** @var \App\Models\User|null $user */
+        $user = $this->auth->user();
+        if (!$user) {
+            return $this->json([
+                'status' => 'error',
+                'message' => 'Sesi tidak valid atau telah berakhir.',
+            ], 401);
+        }
+
+        $name = trim((string) $request->input('name', ''));
+        $email = trim((string) $request->input('email', ''));
+        $currentPassword = (string) $request->input('current_password', '');
+        $newPassword = (string) $request->input('new_password', '');
+        $confirmPassword = (string) $request->input('confirm_password', '');
+
+        // 1. Validasi Nama
+        if ($name === '') {
+            return $this->json([
+                'status' => 'error',
+                'message' => 'Nama lengkap tidak boleh kosong.',
+            ], 422);
+        }
+        if (mb_strlen($name) > 100) {
+            return $this->json([
+                'status' => 'error',
+                'message' => 'Nama lengkap maksimal 100 karakter.',
+            ], 422);
+        }
+
+        // 2. Validasi Format Email
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return $this->json([
+                'status' => 'error',
+                'message' => 'Format alamat email tidak valid.',
+            ], 422);
+        }
+        if (mb_strlen($email) > 150) {
+            return $this->json([
+                'status' => 'error',
+                'message' => 'Alamat email maksimal 150 karakter.',
+            ], 422);
+        }
+
+        // 3. Validasi Keunikan Email (kecuali email user sendiri)
+        $existing = \Core\Database\Connection::selectOne(
+            "SELECT id FROM `users` WHERE `email` = ? AND `id` != ? LIMIT 1",
+            [$email, $user->id]
+        );
+        if ($existing) {
+            return $this->json([
+                'status' => 'error',
+                'message' => "Alamat email '{$email}' sudah digunakan oleh akun lain.",
+            ], 422);
+        }
+
+        // 4. Validasi Penggantian Password (jika ada input password)
+        $passwordChanged = false;
+        if ($currentPassword !== '' || $newPassword !== '' || $confirmPassword !== '') {
+            if ($currentPassword === '') {
+                return $this->json([
+                    'status' => 'error',
+                    'message' => 'Masukkan password saat ini untuk melakukan penggantian password.',
+                ], 422);
+            }
+
+            if (!$user->verifyPassword($currentPassword)) {
+                return $this->json([
+                    'status' => 'error',
+                    'message' => 'Password saat ini yang Anda masukkan tidak sesuai.',
+                ], 422);
+            }
+
+            if ($newPassword === '') {
+                return $this->json([
+                    'status' => 'error',
+                    'message' => 'Password baru tidak boleh kosong.',
+                ], 422);
+            }
+
+            if (strlen($newPassword) < 6) {
+                return $this->json([
+                    'status' => 'error',
+                    'message' => 'Password baru minimal harus 6 karakter.',
+                ], 422);
+            }
+
+            if ($newPassword !== $confirmPassword) {
+                return $this->json([
+                    'status' => 'error',
+                    'message' => 'Konfirmasi password baru tidak cocok.',
+                ], 422);
+            }
+
+            $user->setPassword($newPassword);
+            $passwordChanged = true;
+        }
+
+        $oldName = $user->name;
+        $oldEmail = $user->email;
+
+        $user->name = $name;
+        $user->email = $email;
+        $user->updated_at = date('Y-m-d H:i:s');
+        $user->save();
+
+        // 5. Pencatatan Log Aktivitas & Notifikasi
+        $detailChanges = [];
+        if ($oldName !== $name) {
+            $detailChanges[] = "nama ({$oldName} -> {$name})";
+        }
+        if ($oldEmail !== $email) {
+            $detailChanges[] = "email ({$oldEmail} -> {$email})";
+        }
+        if ($passwordChanged) {
+            $detailChanges[] = "kata sandi";
+        }
+
+        $desc = empty($detailChanges)
+            ? "Pengguna {$name} menyimpan data profil tanpa perubahan data."
+            : "Pengguna {$name} memperbarui profil: " . implode(', ', $detailChanges);
+
+        \App\Services\ActivityLogger::log('user.profile_update', $desc, $user->id, $request);
+
+        \App\Services\ActivityLogger::notify(
+            'Profil Diperbarui',
+            'Data profil Anda berhasil diperbarui di sistem.',
+            'success',
+            $user->id
+        );
+
+        return $this->json([
+            'status' => 'success',
+            'message' => 'Profil Anda berhasil diperbarui.',
+            'user' => [
+                'id' => (int) $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->roleSlug(),
+                'role_name' => $user->role()?->name ?? 'User',
+                'level' => $user->roleLevel(),
+                'created_at' => $user->created_at ?? date('Y-m-d H:i:s'),
+            ],
+        ]);
+    }
+
+    /**
+     * Upload Gambar Background Desktop (POST /admin/wallpaper)
+     */
+    public function uploadWallpaper(Request $request): Response
+    {
+        /** @var \App\Models\User|null $user */
+        $user = $this->auth->user();
+        if (!$user) {
+            return $this->json([
+                'status' => 'error',
+                'message' => 'Sesi tidak valid atau telah berakhir.',
+            ], 401);
+        }
+
+        $file = $request->file('wallpaper') ?? $_FILES['wallpaper'] ?? null;
+        if (!$file || !isset($file['tmp_name']) || empty($file['tmp_name']) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            return $this->json([
+                'status' => 'error',
+                'message' => 'Silakan pilih berkas gambar untuk diunggah.',
+            ], 422);
+        }
+
+        // 1. Validasi Ukuran File (Maksimal 10MB)
+        $maxSize = 10 * 1024 * 1024;
+        if (($file['size'] ?? 0) > $maxSize) {
+            return $this->json([
+                'status' => 'error',
+                'message' => 'Ukuran berkas gambar maksimal 10MB.',
+            ], 422);
+        }
+
+        // 2. Validasi Ekstensi dan MIME Type
+        $originalName = (string) ($file['name'] ?? 'wallpaper.jpg');
+        $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+        $allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'];
+        if (!in_array($extension, $allowedExtensions, true)) {
+            return $this->json([
+                'status' => 'error',
+                'message' => 'Format file tidak didukung. Format yang diizinkan: JPG, PNG, WEBP, GIF, SVG.',
+            ], 422);
+        }
+
+        if (function_exists('finfo_open')) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mime = finfo_file($finfo, $file['tmp_name']);
+            finfo_close($finfo);
+
+            $allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml', 'image/svg'];
+            if (!in_array($mime, $allowedMimes, true)) {
+                return $this->json([
+                    'status' => 'error',
+                    'message' => 'Berkas yang diunggah bukan merupakan gambar yang valid.',
+                ], 422);
+            }
+        }
+
+        // 3. Simpan File ke direktori public/uploads/wallpapers
+        $targetDir = dirname(__DIR__, 3) . '/public/uploads/wallpapers';
+        if (!is_dir($targetDir)) {
+            mkdir($targetDir, 0755, true);
+        }
+
+        $filename = 'wp_' . $user->id . '_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $extension;
+        $targetPath = $targetDir . '/' . $filename;
+
+        // Mendukung file asli dari upload HTTP (move_uploaded_file) atau file temporary testing (rename/copy)
+        $moved = is_uploaded_file($file['tmp_name']) 
+            ? move_uploaded_file($file['tmp_name'], $targetPath)
+            : copy($file['tmp_name'], $targetPath);
+
+        if (!$moved) {
+            return $this->json([
+                'status' => 'error',
+                'message' => 'Gagal menyimpan gambar latar belakang ke penyimpanan server.',
+            ], 500);
+        }
+
+        $publicUrl = '/uploads/wallpapers/' . $filename;
+
+        // 4. Catat Log Aktivitas
+        \App\Services\ActivityLogger::log(
+            'desktop.wallpaper_update',
+            "Pengguna {$user->name} memperbarui gambar latar belakang desktop",
+            $user->id,
+            $request
+        );
+
+        return $this->json([
+            'status' => 'success',
+            'message' => 'Gambar latar belakang desktop berhasil diunggah.',
+            'url' => $publicUrl,
+            'filename' => $filename,
+        ]);
+    }
+
+    /**
+     * Reset Background Desktop (DELETE /admin/wallpaper)
+     */
+    public function deleteWallpaper(Request $request): Response
+    {
+        /** @var \App\Models\User|null $user */
+        $user = $this->auth->user();
+        if (!$user) {
+            return $this->json([
+                'status' => 'error',
+                'message' => 'Sesi tidak valid atau telah berakhir.',
+            ], 401);
+        }
+
+        \App\Services\ActivityLogger::log(
+            'desktop.wallpaper_reset',
+            "Pengguna {$user->name} mengembalikan latar belakang desktop ke default",
+            $user->id,
+            $request
+        );
+
+        return $this->json([
+            'status' => 'success',
+            'message' => 'Latar belakang desktop berhasil dikembalikan ke tampilan default.',
+        ]);
+    }
+
+    /**
      * Endpoint Database Explorer (Accessible ONLY by: superadmin)
      */
     public function database(Request $request): Response

@@ -243,3 +243,106 @@ div.wd-menu-window {
     opacity: 0.9;
     background: rgba(0, 0, 0, 0.05);
 }
+
+/* Desktop Context Menu */
+.wd-context-menu {
+    position: fixed;
+    z-index: 99999;
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 6px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    min-width: 210px;
+    padding: 4px 0;
+    font-size: 13px;
+    user-select: none;
+    animation: wdContextMenuIn 0.1s ease-out;
+}
+
+@keyframes wdContextMenuIn {
+    from {
+        opacity: 0;
+        transform: scale(0.96);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.wd-context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 14px;
+    color: #334155;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+
+.wd-context-menu-item:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+.wd-context-menu-item.danger:hover {
+    background: #fef2f2;
+    color: #ef4444;
+}
+
+.wd-context-menu-divider {
+    height: 1px;
+    margin: 4px 0;
+    background: #e2e8f0;
+}
+
+/* Wallpaper Management Styling */
+.wd-wallpaper-card {
+    cursor: pointer;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    transition: all 0.15s ease;
+}
+
+.wd-wallpaper-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.wd-wallpaper-card.active {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+}
+
+.wd-wallpaper-card .active-indicator {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background: #0d6efd;
+    color: #ffffff;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+}
+
+.wd-dropzone {
+    border: 2px dashed #cbd5e1;
+    border-radius: 8px;
+    background: #f8fafc;
+    padding: 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.wd-dropzone:hover,
+.wd-dropzone.dragover {
+    border-color: #0d6efd;
+    background: #eff6ff;
+}

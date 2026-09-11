@@ -134,20 +134,64 @@ class WindowCore {
                 </header>
                 ` : ''}
                 
-                <main id="wd-workspace" class="wd-workspace flex-grow-1 position-relative overflow-hidden">
+                <main id="wd-workspace" class="wd-workspace flex-grow-1 position-relative overflow-hidden" style="background-color: #f1f5f9;">
+                    <!-- Layer Backdrop Wallpaper Desktop -->
+                    <div id="wd-workspace-backdrop" class="position-absolute top-0 start-0 w-100 h-100" style="pointer-events: none; z-index: 0; background-size: cover; background-position: center; background-repeat: no-repeat; transition: background 0.3s ease, filter 0.3s ease, opacity 0.3s ease;"></div>
+                    <!-- Layer Dimmer Desktop Overlay (agar window & teks tetap kontras) -->
+                    <div id="wd-workspace-dimmer" class="position-absolute top-0 start-0 w-100 h-100 d-none" style="pointer-events: none; z-index: 1; background: rgba(0, 0, 0, 0.15); transition: opacity 0.3s ease;"></div>
+                    <!-- Snap Preview Element -->
                     <div id="wd-snap-preview" class="wd-snap-preview d-none"></div>
+                    <!-- Drag & Drop File Upload Overlay -->
+                    <div id="wd-drag-drop-overlay" class="position-absolute top-0 start-0 w-100 h-100 d-none d-flex flex-column align-items-center justify-content-center" style="z-index: 9999; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); pointer-events: none; color: white;">
+                        <div class="card p-4 text-center border-0 shadow-lg bg-dark text-white border border-primary border-2 border-dashed" style="max-width: 380px;">
+                            <i class="fa-solid fa-cloud-arrow-up display-4 text-primary mb-3"></i>
+                            <h5 class="fw-bold mb-1">Lepaskan Gambar di Sini</h5>
+                            <p class="text-white-50 small mb-0">Gambar akan otomatis diunggah dan dijadikan wallpaper desktop.</p>
+                        </div>
+                    </div>
+                    <!-- Hidden File Input untuk Quick Upload Langsung -->
+                    <input type="file" id="wd-wallpaper-direct-upload" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" class="d-none">
+                    <!-- Desktop Context Menu (Klik Kanan di Workspace) -->
+                    <div id="wd-desktop-context-menu" class="wd-context-menu d-none">
+                        <div class="wd-context-menu-item" id="wd-ctx-open-wallpaper">
+                            <i class="fa-regular fa-image text-primary" style="width: 16px;"></i>
+                            <span>Ganti Background Desktop...</span>
+                        </div>
+                        <div class="wd-context-menu-item" id="wd-ctx-direct-upload">
+                            <i class="fa-solid fa-arrow-up-from-bracket text-info" style="width: 16px;"></i>
+                            <span>Unggah Gambar Langsung...</span>
+                        </div>
+                        <div class="wd-context-menu-divider"></div>
+                        <div class="wd-context-menu-item" id="wd-ctx-refresh">
+                            <i class="fa-solid fa-arrows-rotate text-secondary" style="width: 16px;"></i>
+                            <span>Segarkan Desktop</span>
+                        </div>
+                        <div class="wd-context-menu-divider"></div>
+                        <div class="wd-context-menu-item danger" id="wd-ctx-reset-wallpaper">
+                            <i class="fa-regular fa-trash-can text-danger" style="width: 16px;"></i>
+                            <span>Hapus Background (Reset)</span>
+                        </div>
+                    </div>
                     <!-- Desktop Toast Notification Container -->
                     <div id="wd-toast-container" class="position-fixed bottom-0 end-0 p-3" style="z-index: 10050; pointer-events: none; max-width: 360px;"></div>
                 </main>
 
                 ${(this.options.footer.active) ? `
                 <footer class="bg-primary-subtle border-top">
-                    <div class="d-flex align-items-stretch gap-1 h-100">
-                        <div id="wp-menu" class="wp-menu" style="padding: ${this.options.footer.icons.ypadding ?? '0px'} ${this.options.footer.icons.xpadding ?? '0px'};">
-                            <i class="fa-brands fa-microsoft d-block" style="font-size: ${this.options.footer.icons.dimension ?? '0px'};"></i>
-                            ${this.options.footer.icons.text ?? ''}
+                    <div class="d-flex align-items-stretch justify-content-between h-100">
+                        <div class="d-flex align-items-stretch gap-1 h-100">
+                            <div id="wp-menu" class="wp-menu" style="padding: ${this.options.footer.icons.ypadding ?? '0px'} ${this.options.footer.icons.xpadding ?? '0px'};">
+                                <i class="fa-brands fa-microsoft d-block" style="font-size: ${this.options.footer.icons.dimension ?? '0px'};"></i>
+                                ${this.options.footer.icons.text ?? ''}
+                            </div>
+                            <div class="d-flex align-items-stretch gap-1 h-100" id="wd-active-content">
+                            </div>
                         </div>
-                        <div class="d-flex align-items-stretch gap-1 h-100" id="wd-active-content">
+                        <!-- Tombol Pintas Pengaturan Wallpaper di Footer -->
+                        <div class="d-flex align-items-center pe-2">
+                            <button type="button" class="btn btn-sm btn-link text-secondary text-decoration-none p-1" id="wd-btn-wallpaper-footer" title="Ubah Background Desktop" style="font-size: 13px;">
+                                <i class="fa-regular fa-image"></i>
+                            </button>
                         </div>
                     </div>
                 </footer>
@@ -168,6 +212,21 @@ class WindowCore {
 
         // Inisialisasi sistem notifikasi header
         this.initNotificationSystem();
+
+        // Inisialisasi Wallpaper Desktop
+        this.initDesktopWallpaper();
+
+        // Inisialisasi Context Menu Desktop (Klik Kanan di Workspace)
+        this.initDesktopContextMenu();
+
+        // Inisialisasi Drag & Drop File Gambar Langsung ke Workspace
+        this.initDesktopDragDrop();
+
+        // Tombol Pintas Wallpaper di Footer
+        const btnWpFooter = document.getElementById('wd-btn-wallpaper-footer');
+        if (btnWpFooter) {
+            btnWpFooter.addEventListener('click', () => this.openWallpaperWindow());
+        }
 
         // Pasang event tombol teks logout
         const btnLogout = document.getElementById('wd-header-logout');
@@ -576,12 +635,14 @@ class WindowCore {
         winEl.setAttribute('data-action', item.action || '');
         winEl.setAttribute('data-route', item.route || '');
 
-        // Deteksi apakah ini modul Master Pengguna, Data Peran (Roles), atau Laporan Aktivitas
+        // Deteksi apakah ini modul Master Pengguna, Data Peran (Roles), Laporan Aktivitas, Profil Saya, atau Wallpaper Desktop
         const isUsersModule = (item.action === 'open_users') || (item.route === '/admin/users');
         const isRolesModule = (item.action === 'open_roles') || (item.route === '/admin/roles');
         const isReportsModule = (item.action === 'open_reports') || (item.route === '/admin/reports');
-        const defaultWidth = isUsersModule ? 780 : (isRolesModule ? 840 : (isReportsModule ? 860 : 440));
-        const defaultHeight = isUsersModule ? 520 : (isRolesModule ? 560 : (isReportsModule ? 540 : 250));
+        const isProfileModule = (item.action === 'open_profile') || (item.route === '/admin/profile');
+        const isWallpaperModule = (item.action === 'open_wallpaper') || (item.id === 'wallpaper') || (item.id === 'wallpaper-settings');
+        const defaultWidth = isUsersModule ? 780 : (isRolesModule ? 840 : (isReportsModule ? 860 : (isProfileModule ? 780 : (isWallpaperModule ? 750 : 440))));
+        const defaultHeight = isUsersModule ? 520 : (isRolesModule ? 560 : (isReportsModule ? 540 : (isProfileModule ? 530 : (isWallpaperModule ? 540 : 250))));
 
         // Posisi default bertingkat (cascade offset)
         const offset = (this.state.windows.length % 6) * 24 + 30;
@@ -688,6 +749,10 @@ class WindowCore {
             this.renderRoleManagement(winEl);
         } else if (isReportsModule) {
             this.renderActivityReports(winEl);
+        } else if (isProfileModule) {
+            this.renderProfileManagement(winEl);
+        } else if (isWallpaperModule) {
+            this.renderWallpaperManagement(winEl);
         }
 
         // Trigger custom event agar desain UI atau endpoint loader dapat di-hook oleh user
@@ -2880,6 +2945,1121 @@ class WindowCore {
 
         // Muat data saat window dibuka
         fetchData();
+    }
+
+    /**
+     * Render antarmuka modul Profil Saya di dalam window.
+     * Mengambil data profil dan log aktivitas dari GET /admin/profile,
+     * serta mendukung pembaruan nama, email, dan kata sandi via PUT /admin/profile.
+     * 
+     * @param {HTMLElement} winEl Elemen window
+     */
+    renderProfileManagement(winEl) {
+        const body = winEl.querySelector('.wd-window-body');
+        if (!body) return;
+
+        body.className = 'wd-window-body card-body p-0 d-flex flex-column h-100 overflow-hidden';
+        body.innerHTML = `
+            <!-- 1. Header Profil Summary Banner -->
+            <div class="py-2 px-3 bg-light border-bottom d-flex justify-content-between align-items-center gap-2 flex-wrap flex-shrink-0">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle bg-primary-subtle text-primary border border-primary-subtle d-flex align-items-center justify-content-center shadow-sm" style="width: 40px; height: 40px; font-size: 18px;">
+                        <i class="fa-solid fa-user-gear"></i>
+                    </div>
+                    <div>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="fw-bold text-dark" id="profile-display-name-${winEl.id}">Memuat data...</span>
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle" id="profile-badge-role-${winEl.id}">-</span>
+                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle" id="profile-badge-level-${winEl.id}">Level -</span>
+                        </div>
+                        <div class="text-muted small" id="profile-display-email-${winEl.id}">-</div>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-refresh-profile-${winEl.id}" title="Muat Ulang Data Profil">
+                        <i class="fa-solid fa-arrows-rotate"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2. Alert Container -->
+            <div id="profile-alert-${winEl.id}" class="d-none px-3 pt-2"></div>
+
+            <!-- 3. Konten Utama: Form Profil & Aktivitas -->
+            <div class="flex-grow-1 overflow-auto p-3 bg-white">
+                <div class="row g-3">
+                    <!-- Kolom Kiri: Form Ubah Profil & Kata Sandi -->
+                    <div class="col-12 col-lg-7">
+                        <div class="card border shadow-sm">
+                            <div class="card-header bg-light py-2 px-3 border-bottom">
+                                <span class="fw-semibold small text-dark"><i class="fa-regular fa-id-card text-primary me-1"></i> Data Akun Pengguna</span>
+                            </div>
+                            <div class="card-body p-3">
+                                <form id="profile-form-${winEl.id}" autocomplete="off">
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-semibold mb-1 text-secondary">Nama Lengkap</label>
+                                        <input type="text" class="form-control form-control-sm" id="profile-input-name-${winEl.id}" placeholder="Nama lengkap Anda" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-semibold mb-1 text-secondary">Alamat Email</label>
+                                        <input type="email" class="form-control form-control-sm" id="profile-input-email-${winEl.id}" placeholder="email@domain.com" required>
+                                        <div class="form-text" style="font-size: 11px;">Digunakan untuk masuk ke sistem dan menerima notifikasi.</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-semibold mb-1 text-secondary">Peran & Hak Akses</label>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text bg-light text-muted"><i class="fa-solid fa-shield-halved"></i></span>
+                                            <input type="text" class="form-control bg-light text-muted" id="profile-input-role-${winEl.id}" readonly disabled>
+                                        </div>
+                                        <div class="form-text text-muted" style="font-size: 11px;">Peran dan level hak akses diatur oleh Administrator sistem.</div>
+                                    </div>
+
+                                    <hr class="my-3 text-muted opacity-25">
+
+                                    <div class="mb-2">
+                                        <span class="fw-semibold small text-dark d-block mb-1"><i class="fa-solid fa-key text-warning me-1"></i> Keamanan & Kata Sandi</span>
+                                        <span class="text-muted" style="font-size: 11px;">Kosongkan jika tidak ingin mengganti password.</span>
+                                    </div>
+
+                                    <div class="mb-2">
+                                        <label class="form-label small fw-semibold mb-1 text-secondary">Password Saat Ini</label>
+                                        <input type="password" class="form-control form-control-sm" id="profile-input-current-pass-${winEl.id}" placeholder="Masukkan password saat ini" autocomplete="current-password">
+                                    </div>
+
+                                    <div class="row g-2 mb-3">
+                                        <div class="col-12 col-md-6">
+                                            <label class="form-label small fw-semibold mb-1 text-secondary">Password Baru</label>
+                                            <input type="password" class="form-control form-control-sm" id="profile-input-new-pass-${winEl.id}" placeholder="Minimal 6 karakter" autocomplete="new-password">
+                                        </div>
+                                        <div class="col-12 col-md-6">
+                                            <label class="form-label small fw-semibold mb-1 text-secondary">Konfirmasi Password Baru</label>
+                                            <input type="password" class="form-control form-control-sm" id="profile-input-confirm-pass-${winEl.id}" placeholder="Ulangi password baru" autocomplete="new-password">
+                                        </div>
+                                    </div>
+
+                                    <div class="d-flex justify-content-end gap-2 pt-2 border-top">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-reset-profile-form-${winEl.id}">
+                                            <i class="fa-solid fa-rotate-left me-1"></i> Reset
+                                        </button>
+                                        <button type="submit" class="btn btn-sm btn-primary px-3 shadow-sm" id="btn-submit-profile-${winEl.id}">
+                                            <i class="fa-solid fa-floppy-disk me-1"></i> Simpan Perubahan
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Kolom Kanan: Ringkasan Akun & Log Aktivitas -->
+                    <div class="col-12 col-lg-5">
+                        <!-- Ringkasan Akun -->
+                        <div class="card border shadow-sm mb-3">
+                            <div class="card-header bg-light py-2 px-3 border-bottom">
+                                <span class="fw-semibold small text-dark"><i class="fa-solid fa-circle-info text-info me-1"></i> Ringkasan Akun</span>
+                            </div>
+                            <div class="card-body p-3">
+                                <ul class="list-unstyled mb-0" style="font-size: 12px;">
+                                    <li class="d-flex justify-content-between py-1 border-bottom">
+                                        <span class="text-secondary">ID Pengguna</span>
+                                        <span class="fw-bold font-monospace text-dark" id="profile-summary-id-${winEl.id}">-</span>
+                                    </li>
+                                    <li class="d-flex justify-content-between py-1 border-bottom">
+                                        <span class="text-secondary">Status Akun</span>
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fa-solid fa-circle-check me-1"></i>Aktif</span>
+                                    </li>
+                                    <li class="d-flex justify-content-between py-1">
+                                        <span class="text-secondary">Terdaftar Sejak</span>
+                                        <span class="font-monospace text-dark" id="profile-summary-created-${winEl.id}">-</span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- Aktivitas Terakhir Pengguna -->
+                        <div class="card border shadow-sm">
+                            <div class="card-header bg-light py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
+                                <span class="fw-semibold small text-dark"><i class="fa-solid fa-clock-rotate-left text-secondary me-1"></i> Aktivitas Terakhir Anda</span>
+                                <span class="badge bg-secondary-subtle text-secondary" style="font-size: 10px;">5 Terakhir</span>
+                            </div>
+                            <div class="card-body p-0">
+                                <div id="profile-activities-list-${winEl.id}" class="list-group list-group-flush" style="font-size: 12px; max-height: 250px; overflow-y: auto;">
+                                    <div class="p-3 text-center text-muted small">
+                                        <div class="spinner-border spinner-border-sm text-primary me-1" role="status"></div>
+                                        Memuat riwayat aktivitas...
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. Footer Bar Status Modul -->
+            <div class="py-1 px-3 bg-light border-top d-flex justify-content-between align-items-center text-muted flex-shrink-0" style="font-size: 11px;">
+                <span>Modul Profil Pengguna &bull; Terhubung ke <code>/admin/profile</code></span>
+                <span id="profile-status-bar-${winEl.id}">Status: Siap</span>
+            </div>
+        `;
+
+        winEl._profileData = null;
+
+        const displayName = body.querySelector(`#profile-display-name-${winEl.id}`);
+        const displayEmail = body.querySelector(`#profile-display-email-${winEl.id}`);
+        const badgeRole = body.querySelector(`#profile-badge-role-${winEl.id}`);
+        const badgeLevel = body.querySelector(`#profile-badge-level-${winEl.id}`);
+        const inputName = body.querySelector(`#profile-input-name-${winEl.id}`);
+        const inputEmail = body.querySelector(`#profile-input-email-${winEl.id}`);
+        const inputRole = body.querySelector(`#profile-input-role-${winEl.id}`);
+        const inputCurrentPass = body.querySelector(`#profile-input-current-pass-${winEl.id}`);
+        const inputNewPass = body.querySelector(`#profile-input-new-pass-${winEl.id}`);
+        const inputConfirmPass = body.querySelector(`#profile-input-confirm-pass-${winEl.id}`);
+        const form = body.querySelector(`#profile-form-${winEl.id}`);
+        const btnReset = body.querySelector(`#btn-reset-profile-form-${winEl.id}`);
+        const btnSubmit = body.querySelector(`#btn-submit-profile-${winEl.id}`);
+        const btnRefresh = body.querySelector(`#btn-refresh-profile-${winEl.id}`);
+        const alertContainer = body.querySelector(`#profile-alert-${winEl.id}`);
+        const summaryId = body.querySelector(`#profile-summary-id-${winEl.id}`);
+        const summaryCreated = body.querySelector(`#profile-summary-created-${winEl.id}`);
+        const activitiesList = body.querySelector(`#profile-activities-list-${winEl.id}`);
+        const statusBar = body.querySelector(`#profile-status-bar-${winEl.id}`);
+
+        const showAlert = (message, type = 'success') => {
+            if (!alertContainer) return;
+            const icon = type === 'success' ? 'fa-solid fa-circle-check' : 'fa-solid fa-triangle-exclamation';
+            alertContainer.className = 'px-3 pt-2';
+            alertContainer.innerHTML = `
+                <div class="alert alert-${type} alert-dismissible fade show py-2 px-3 small mb-0 d-flex align-items-center gap-2" role="alert">
+                    <i class="${icon} flex-shrink-0"></i>
+                    <div class="flex-grow-1">${message}</div>
+                    <button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Close" style="font-size: 9px;"></button>
+                </div>
+            `;
+            if (type === 'success') {
+                setTimeout(() => {
+                    if (alertContainer) alertContainer.className = 'd-none px-3 pt-2';
+                }, 5000);
+            }
+        };
+
+        const getActivityBadge = (action) => {
+            if (action.startsWith('auth.login')) {
+                return '<span class="badge bg-success-subtle text-success border border-success-subtle py-0"><i class="fa-solid fa-right-to-bracket me-1"></i>auth.login</span>';
+            } else if (action.startsWith('auth.logout')) {
+                return '<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle py-0"><i class="fa-solid fa-right-from-bracket me-1"></i>auth.logout</span>';
+            } else if (action.startsWith('user.profile_update')) {
+                return '<span class="badge bg-info-subtle text-info border border-info-subtle py-0"><i class="fa-solid fa-user-pen me-1"></i>update profil</span>';
+            } else if (action.startsWith('user.')) {
+                return '<span class="badge bg-primary-subtle text-primary border border-primary-subtle py-0"><i class="fa-solid fa-user me-1"></i>user</span>';
+            } else if (action.startsWith('role.')) {
+                return '<span class="badge bg-warning-subtle text-warning border border-warning-subtle py-0"><i class="fa-solid fa-shield me-1"></i>role</span>';
+            }
+            return `<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle py-0">${action}</span>`;
+        };
+
+        const renderActivities = (activities = []) => {
+            if (!activitiesList) return;
+            if (activities.length === 0) {
+                activitiesList.innerHTML = `
+                    <div class="p-3 text-center text-muted small">
+                        <i class="fa-regular fa-clipboard d-block mb-1 fs-5 text-secondary"></i>
+                        Belum ada riwayat aktivitas.
+                    </div>
+                `;
+                return;
+            }
+
+            activitiesList.innerHTML = activities.map(act => `
+                <div class="list-group-item p-2 border-start-0 border-end-0">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        ${getActivityBadge(act.action)}
+                        <span class="text-muted font-monospace" style="font-size: 10px;">${act.created_at}</span>
+                    </div>
+                    <div class="text-dark small text-truncate" title="${act.description}">${act.description}</div>
+                    <div class="text-muted" style="font-size: 10px;">IP: <code>${act.ip_address || '127.0.0.1'}</code></div>
+                </div>
+            `).join('');
+        };
+
+        const fetchProfile = async () => {
+            if (statusBar) statusBar.textContent = 'Memuat data profil...';
+            try {
+                let data = null;
+                if (window.SyntaxCore && typeof window.SyntaxCore.api === 'function') {
+                    data = await window.SyntaxCore.api('/admin/profile');
+                } else {
+                    const res = await fetch('/admin/profile', {
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    data = await res.json();
+                }
+
+                if (data && data.status === 'success' && data.user) {
+                    winEl._profileData = data.user;
+                    if (displayName) displayName.textContent = data.user.name;
+                    if (displayEmail) displayEmail.textContent = data.user.email;
+                    if (badgeRole) badgeRole.textContent = data.user.role_name || data.user.role;
+                    if (badgeLevel) badgeLevel.textContent = `Level ${data.user.level}`;
+                    if (inputName) inputName.value = data.user.name;
+                    if (inputEmail) inputEmail.value = data.user.email;
+                    if (inputRole) inputRole.value = `${data.user.role_name} (Level ${data.user.level})`;
+                    if (summaryId) summaryId.textContent = `#${data.user.id}`;
+                    if (summaryCreated) summaryCreated.textContent = data.user.created_at;
+
+                    renderActivities(data.recent_activities || []);
+                    if (statusBar) statusBar.textContent = 'Status: Terhubung & Sinkron';
+                } else {
+                    showAlert(data?.message || 'Gagal memuat profil pengguna.', 'danger');
+                    if (statusBar) statusBar.textContent = 'Status: Gagal memuat data';
+                }
+            } catch (err) {
+                showAlert('Gagal menghubungi server: ' + err.message, 'danger');
+                if (statusBar) statusBar.textContent = 'Status: Kesalahan koneksi';
+            }
+        };
+
+        if (form) {
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const name = inputName ? inputName.value.trim() : '';
+                const email = inputEmail ? inputEmail.value.trim() : '';
+                const currentPass = inputCurrentPass ? inputCurrentPass.value : '';
+                const newPass = inputNewPass ? inputNewPass.value : '';
+                const confirmPass = inputConfirmPass ? inputConfirmPass.value : '';
+
+                if (!name) {
+                    showAlert('Nama lengkap tidak boleh kosong.', 'danger');
+                    if (inputName) inputName.focus();
+                    return;
+                }
+
+                if (!email) {
+                    showAlert('Alamat email tidak boleh kosong.', 'danger');
+                    if (inputEmail) inputEmail.focus();
+                    return;
+                }
+
+                if (newPass || currentPass || confirmPass) {
+                    if (!currentPass) {
+                        showAlert('Masukkan password saat ini untuk memverifikasi penggantian kata sandi.', 'warning');
+                        if (inputCurrentPass) inputCurrentPass.focus();
+                        return;
+                    }
+                    if (newPass.length < 6) {
+                        showAlert('Password baru minimal harus 6 karakter.', 'warning');
+                        if (inputNewPass) inputNewPass.focus();
+                        return;
+                    }
+                    if (newPass !== confirmPass) {
+                        showAlert('Konfirmasi password baru tidak cocok.', 'warning');
+                        if (inputConfirmPass) inputConfirmPass.focus();
+                        return;
+                    }
+                }
+
+                const originalBtnHtml = btnSubmit ? btnSubmit.innerHTML : '';
+                if (btnSubmit) {
+                    btnSubmit.disabled = true;
+                    btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Menyimpan...';
+                }
+                if (statusBar) statusBar.textContent = 'Menyimpan perubahan...';
+
+                const csrfToken = this.getCsrfToken();
+                const payload = {
+                    name,
+                    email,
+                    current_password: currentPass,
+                    new_password: newPass,
+                    confirm_password: confirmPass,
+                    _token: csrfToken
+                };
+
+                try {
+                    let result = null;
+                    if (window.SyntaxCore && typeof window.SyntaxCore.api === 'function') {
+                        result = await window.SyntaxCore.api('/admin/profile', {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': csrfToken
+                            },
+                            body: JSON.stringify(payload)
+                        });
+                    } else {
+                        const res = await fetch('/admin/profile', {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': csrfToken
+                            },
+                            body: JSON.stringify(payload)
+                        });
+                        result = await res.json();
+                    }
+
+                    if (result && result.status === 'success') {
+                        winEl._profileData = result.user;
+                        if (displayName) displayName.textContent = result.user.name;
+                        if (displayEmail) displayEmail.textContent = result.user.email;
+                        this.options.userName = result.user.name;
+                        this.options.userEmail = result.user.email;
+
+                        // Perbarui nama di header bar atas (#wd-header-user-info)
+                        const headerUserInfo = document.getElementById('wd-header-user-info');
+                        if (headerUserInfo) {
+                            headerUserInfo.innerHTML = `
+                                <span class="text-white fw-medium">${result.user.name}</span>
+                                <span class="text-white-50 ms-1" style="font-size: 11px;">(${result.user.role_name || result.user.role})</span>
+                            `;
+                        }
+
+                        // Kosongkan form input password
+                        if (inputCurrentPass) inputCurrentPass.value = '';
+                        if (inputNewPass) inputNewPass.value = '';
+                        if (inputConfirmPass) inputConfirmPass.value = '';
+
+                        // Tampilkan alert sukses dan toast notifikasi desktop
+                        showAlert(result.message || 'Profil Anda berhasil diperbarui.', 'success');
+                        this.showToast('Profil Diperbarui', 'Data profil Anda berhasil disimpan.', 'success');
+
+                        // Refresh ulang data profil dan log aktivitas
+                        fetchProfile();
+                    } else {
+                        showAlert(result?.message || 'Gagal memperbarui profil.', 'danger');
+                        if (statusBar) statusBar.textContent = 'Status: Gagal menyimpan';
+                    }
+                } catch (err) {
+                    showAlert('Terjadi kesalahan: ' + err.message, 'danger');
+                    if (statusBar) statusBar.textContent = 'Status: Terjadi kesalahan';
+                } finally {
+                    if (btnSubmit) {
+                        btnSubmit.disabled = false;
+                        btnSubmit.innerHTML = originalBtnHtml;
+                    }
+                }
+            });
+        }
+
+        if (btnReset) {
+            btnReset.addEventListener('click', () => {
+                if (winEl._profileData) {
+                    if (inputName) inputName.value = winEl._profileData.name || '';
+                    if (inputEmail) inputEmail.value = winEl._profileData.email || '';
+                }
+                if (inputCurrentPass) inputCurrentPass.value = '';
+                if (inputNewPass) inputNewPass.value = '';
+                if (inputConfirmPass) inputConfirmPass.value = '';
+                if (alertContainer) alertContainer.className = 'd-none px-3 pt-2';
+            });
+        }
+
+        if (btnRefresh) {
+            btnRefresh.addEventListener('click', () => {
+                fetchProfile();
+            });
+        }
+
+        // Muat data profil saat window dibuka
+        fetchProfile();
+    }
+
+    /**
+     * Buka jendela dialog kustomisasi Latar Belakang Desktop (Wallpaper)
+     */
+    openWallpaperWindow() {
+        return this.openWindow({
+            id: 'wallpaper-settings',
+            title: 'Latar Belakang Desktop',
+            icon: 'fa-regular fa-image',
+            action: 'open_wallpaper'
+        });
+    }
+
+    /**
+     * Inisialisasi wallpaper desktop dari konfigurasi tersimpan (localStorage)
+     */
+    initDesktopWallpaper() {
+        this._wallpaperConfig = {
+            type: 'none',
+            url: '',
+            gradient: '',
+            mode: 'cover',
+            dimmer: 0,
+            blur: 0
+        };
+
+        try {
+            const saved = localStorage.getItem('syntaxcore_desktop_wallpaper');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                this.applyWallpaper(parsed, false);
+                return;
+            }
+        } catch (e) {
+            console.warn('[WindowCore] Gagal memuat wallpaper tersimpan:', e);
+        }
+
+        this.applyWallpaper(this._wallpaperConfig, false);
+    }
+
+    /**
+     * Inisialisasi Context Menu klik kanan pada area desktop (#wd-workspace)
+     */
+    initDesktopContextMenu() {
+        const workspace = document.getElementById('wd-workspace');
+        const contextMenu = document.getElementById('wd-desktop-context-menu');
+        const directInput = document.getElementById('wd-wallpaper-direct-upload');
+        if (!workspace || !contextMenu) return;
+
+        workspace.addEventListener('contextmenu', (e) => {
+            // Jangan buka context menu desktop jika pengguna mengklik kanan di dalam elemen window, footer, atau header
+            if (e.target.closest('.wd-window, #wd-footer, #wd-header, .wd-context-menu')) {
+                return;
+            }
+            e.preventDefault();
+
+            // Hitung posisi aman agar menu tidak meluap ke tepi bawah atau kanan layar
+            const menuWidth = 220;
+            const menuHeight = 160;
+            let left = e.clientX;
+            let top = e.clientY;
+
+            if (left + menuWidth > window.innerWidth) {
+                left = window.innerWidth - menuWidth - 8;
+            }
+            if (top + menuHeight > window.innerHeight) {
+                top = window.innerHeight - menuHeight - 8;
+            }
+
+            contextMenu.style.left = `${left}px`;
+            contextMenu.style.top = `${top}px`;
+            contextMenu.classList.remove('d-none');
+        });
+
+        // Tutup context menu saat pengguna mengklik di luar
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#wd-desktop-context-menu')) {
+                contextMenu.classList.add('d-none');
+            }
+        });
+
+        // Tutup saat menekan tombol Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !contextMenu.classList.contains('d-none')) {
+                contextMenu.classList.add('d-none');
+            }
+        });
+
+        // Event listener item-item context menu
+        const btnOpenWp = document.getElementById('wd-ctx-open-wallpaper');
+        if (btnOpenWp) {
+            btnOpenWp.addEventListener('click', () => {
+                contextMenu.classList.add('d-none');
+                this.openWallpaperWindow();
+            });
+        }
+
+        const btnDirectUpload = document.getElementById('wd-ctx-direct-upload');
+        if (btnDirectUpload && directInput) {
+            btnDirectUpload.addEventListener('click', () => {
+                contextMenu.classList.add('d-none');
+                directInput.click();
+            });
+        }
+
+        const btnRefresh = document.getElementById('wd-ctx-refresh');
+        if (btnRefresh) {
+            btnRefresh.addEventListener('click', () => {
+                contextMenu.classList.add('d-none');
+                const snapPreview = document.getElementById('wd-snap-preview');
+                if (snapPreview) snapPreview.classList.add('d-none');
+                this.showToast('Desktop Disegarkan', 'Workspace telah disegarkan.', 'info');
+            });
+        }
+
+        const btnResetWp = document.getElementById('wd-ctx-reset-wallpaper');
+        if (btnResetWp) {
+            btnResetWp.addEventListener('click', () => {
+                contextMenu.classList.add('d-none');
+                this.resetWallpaper();
+            });
+        }
+
+        // Listener untuk direct upload input
+        if (directInput) {
+            directInput.addEventListener('change', (e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                    this.uploadAndApplyWallpaper(file);
+                    directInput.value = '';
+                }
+            });
+        }
+    }
+
+    /**
+     * Inisialisasi fitur Drag & Drop berkas gambar langsung ke atas workspace desktop
+     */
+    initDesktopDragDrop() {
+        const workspace = document.getElementById('wd-workspace');
+        const overlay = document.getElementById('wd-drag-drop-overlay');
+        if (!workspace || !overlay) return;
+
+        let dragCounter = 0;
+
+        workspace.addEventListener('dragenter', (e) => {
+            if (e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+                dragCounter++;
+                overlay.classList.remove('d-none');
+            }
+        });
+
+        workspace.addEventListener('dragover', (e) => {
+            if (e.dataTransfer && e.dataTransfer.types && Array.from(e.dataTransfer.types).includes('Files')) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+            }
+        });
+
+        workspace.addEventListener('dragleave', () => {
+            dragCounter--;
+            if (dragCounter <= 0) {
+                dragCounter = 0;
+                overlay.classList.add('d-none');
+            }
+        });
+
+        workspace.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dragCounter = 0;
+            overlay.classList.add('d-none');
+
+            const files = e.dataTransfer?.files;
+            if (files && files.length > 0) {
+                const file = files[0];
+                if (file.type.startsWith('image/')) {
+                    this.uploadAndApplyWallpaper(file);
+                } else {
+                    this.showToast('Format Tidak Didukung', 'Hanya berkas gambar (PNG, JPG, WEBP, GIF, SVG) yang dapat dijadikan wallpaper.', 'warning');
+                }
+            }
+        });
+    }
+
+    /**
+     * Terapkan konfigurasi wallpaper ke elemen visual #wd-workspace-backdrop dan simpan ke localStorage
+     * 
+     * @param {Object} config Konfigurasi wallpaper
+     * @param {boolean} saveToStorage Apakah disimpan ke localStorage
+     */
+    applyWallpaper(config, saveToStorage = true) {
+        this._wallpaperConfig = Object.assign({
+            type: 'none',
+            url: '',
+            gradient: '',
+            mode: 'cover',
+            dimmer: 0,
+            blur: 0
+        }, config);
+
+        const backdrop = document.getElementById('wd-workspace-backdrop');
+        const dimmer = document.getElementById('wd-workspace-dimmer');
+        const workspace = document.getElementById('wd-workspace');
+
+        if (!backdrop || !workspace) return;
+
+        if (this._wallpaperConfig.type === 'image' && this._wallpaperConfig.url) {
+            backdrop.style.backgroundImage = `url("${this._wallpaperConfig.url}")`;
+            backdrop.style.backgroundSize = this._wallpaperConfig.mode || 'cover';
+            backdrop.style.backgroundRepeat = this._wallpaperConfig.mode === 'repeat' ? 'repeat' : 'no-repeat';
+            backdrop.style.backgroundPosition = 'center';
+            backdrop.style.filter = this._wallpaperConfig.blur ? `blur(${this._wallpaperConfig.blur}px)` : 'none';
+            backdrop.style.transform = this._wallpaperConfig.blur ? 'scale(1.02)' : 'none';
+        } else if (this._wallpaperConfig.type === 'gradient' && this._wallpaperConfig.gradient) {
+            backdrop.style.backgroundImage = this._wallpaperConfig.gradient;
+            backdrop.style.backgroundSize = 'cover';
+            backdrop.style.backgroundRepeat = 'no-repeat';
+            backdrop.style.backgroundPosition = 'center';
+            backdrop.style.filter = 'none';
+            backdrop.style.transform = 'none';
+        } else {
+            backdrop.style.backgroundImage = 'none';
+            backdrop.style.filter = 'none';
+            backdrop.style.transform = 'none';
+            workspace.style.backgroundColor = '#f1f5f9';
+        }
+
+        if (dimmer) {
+            const dimmerVal = parseInt(this._wallpaperConfig.dimmer, 10) || 0;
+            if (dimmerVal > 0) {
+                dimmer.classList.remove('d-none');
+                dimmer.style.background = `rgba(0, 0, 0, ${dimmerVal / 100})`;
+            } else {
+                dimmer.classList.add('d-none');
+            }
+        }
+
+        if (saveToStorage) {
+            try {
+                localStorage.setItem('syntaxcore_desktop_wallpaper', JSON.stringify(this._wallpaperConfig));
+            } catch (e) {
+                console.warn('[WindowCore] Gagal menyimpan wallpaper ke localStorage:', e);
+            }
+        }
+
+        document.dispatchEvent(new CustomEvent('syntaxcore:wallpaper-updated', {
+            detail: { config: this._wallpaperConfig }
+        }));
+    }
+
+    /**
+     * Kembalikan background desktop ke tampilan default polos
+     */
+    async resetWallpaper() {
+        this.applyWallpaper({
+            type: 'none',
+            url: '',
+            gradient: '',
+            mode: 'cover',
+            dimmer: 0,
+            blur: 0
+        });
+
+        try {
+            localStorage.removeItem('syntaxcore_desktop_wallpaper');
+        } catch (e) {}
+
+        try {
+            await fetch('/admin/wallpaper', {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRF-TOKEN': this.getCsrfToken(),
+                    'Accept': 'application/json'
+                }
+            });
+        } catch (e) {}
+
+        this.showToast('Background Direset', 'Latar belakang desktop dikembalikan ke tampilan default.', 'info');
+    }
+
+    /**
+     * Unggah berkas gambar ke backend dan langsung terapkan ke desktop
+     * 
+     * @param {File} file Berkas gambar yang diunggah
+     */
+    async uploadAndApplyWallpaper(file) {
+        if (!file || !file.type.startsWith('image/')) {
+            this.showToast('Format Tidak Didukung', 'Berkas harus berupa gambar (JPG, PNG, WEBP, GIF, SVG).', 'danger');
+            return;
+        }
+
+        if (file.size > 10 * 1024 * 1024) {
+            this.showToast('Ukuran Terlalu Besar', 'Ukuran gambar maksimal adalah 10MB.', 'danger');
+            return;
+        }
+
+        // Preview lokal instan dengan FileReader agar respon langsung terasa instan
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            this.applyWallpaper({
+                type: 'image',
+                url: e.target.result,
+                filename: file.name,
+                mode: this._wallpaperConfig.mode || 'cover',
+                dimmer: this._wallpaperConfig.dimmer || 0,
+                blur: this._wallpaperConfig.blur || 0
+            });
+        };
+        reader.readAsDataURL(file);
+
+        this.showToast('Mengunggah Wallpaper...', 'Sedang mengunggah gambar ke server...', 'info');
+
+        try {
+            const formData = new FormData();
+            formData.append('wallpaper', file);
+            formData.append('_token', this.getCsrfToken());
+
+            const res = await fetch('/admin/wallpaper', {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': this.getCsrfToken(),
+                    'Accept': 'application/json'
+                },
+                body: formData
+            });
+
+            const data = await res.json();
+            if (data && data.status === 'success' && data.url) {
+                this.applyWallpaper({
+                    type: 'image',
+                    url: data.url,
+                    filename: data.filename || file.name,
+                    mode: this._wallpaperConfig.mode || 'cover',
+                    dimmer: this._wallpaperConfig.dimmer || 0,
+                    blur: this._wallpaperConfig.blur || 0
+                });
+                this.showToast('Background Diperbarui', 'Gambar berhasil diunggah dan dijadikan wallpaper desktop.', 'success');
+            } else {
+                this.showToast('Peringatan Upload', data?.message || 'Gambar diterapkan secara lokal namun gagal disimpan permanen di server.', 'warning');
+            }
+        } catch (err) {
+            this.showToast('Koneksi Gagal', 'Gagal mengunggah ke server: ' + err.message, 'warning');
+        }
+    }
+
+    /**
+     * Render antarmuka jendela Pengaturan Latar Belakang Desktop di dalam window
+     * 
+     * @param {HTMLElement} winEl Elemen window
+     */
+    renderWallpaperManagement(winEl) {
+        const body = winEl.querySelector('.wd-window-body');
+        if (!body) return;
+
+        body.className = 'wd-window-body card-body p-0 d-flex flex-column h-100 overflow-hidden';
+        body.innerHTML = `
+            <!-- 1. Header Toolbar -->
+            <div class="py-2 px-3 bg-light border-bottom d-flex justify-content-between align-items-center flex-shrink-0">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="fa-regular fa-image text-primary"></i>
+                    <span class="fw-semibold small text-dark">Kustomisasi Background Desktop Workspace</span>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" id="wp-btn-reset-${winEl.id}" style="font-size: 11px;" title="Hapus wallpaper dan kembalikan ke standar">
+                    <i class="fa-regular fa-trash-can me-1"></i> Reset Default
+                </button>
+            </div>
+
+            <!-- 2. Konten Utama -->
+            <div class="flex-grow-1 overflow-auto p-3 bg-white">
+                <div class="row g-3">
+                    <!-- Kolom Kiri: Pratinjau Realtime & Penyesuaian Tampilan -->
+                    <div class="col-12 col-md-5">
+                        <!-- Pratinjau Layar Monitor Miniatur -->
+                        <div class="card border shadow-sm mb-3">
+                            <div class="card-header bg-light py-2 px-3 border-bottom">
+                                <span class="fw-semibold small text-dark"><i class="fa-solid fa-display me-1 text-secondary"></i> Pratinjau Realtime</span>
+                            </div>
+                            <div class="card-body p-3 text-center">
+                                <div class="p-1 bg-dark rounded shadow-sm mx-auto" style="max-width: 250px;">
+                                    <div id="wp-preview-screen-${winEl.id}" class="rounded overflow-hidden position-relative" style="height: 135px; background-color: #f1f5f9; background-size: cover; background-position: center; transition: all 0.2s ease;">
+                                        <div id="wp-preview-dimmer-${winEl.id}" class="position-absolute top-0 start-0 w-100 h-100 d-none" style="background: rgba(0,0,0,0.15);"></div>
+                                        <!-- Ilustrasi Window Mini di Pratinjau -->
+                                        <div class="position-absolute bg-white rounded shadow-sm border p-1" style="width: 70px; height: 42px; font-size: 7px; top: 12px; left: 14px; opacity: 0.9;">
+                                            <div class="bg-light px-1 py-0 mb-1 border-bottom text-truncate fw-bold">Window 1</div>
+                                            <div class="bg-light-subtle w-75 py-0 mb-1"></div>
+                                        </div>
+                                        <div class="position-absolute bg-white rounded shadow-sm border p-1" style="width: 75px; height: 48px; font-size: 7px; top: 35px; right: 18px; opacity: 0.95;">
+                                            <div class="bg-primary-subtle text-primary px-1 py-0 mb-1 border-bottom text-truncate fw-bold">Window 2</div>
+                                            <div class="bg-light-subtle w-100 py-0 mb-1"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mt-2 text-muted text-truncate" style="font-size: 11px;" id="wp-preview-caption-${winEl.id}">
+                                    Tampilan Default
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Pengaturan Penyesuaian -->
+                        <div class="card border shadow-sm">
+                            <div class="card-header bg-light py-2 px-3 border-bottom">
+                                <span class="fw-semibold small text-dark"><i class="fa-solid fa-sliders me-1 text-secondary"></i> Penyesuaian Tampilan</span>
+                            </div>
+                            <div class="card-body p-3">
+                                <div class="mb-3">
+                                    <label class="form-label small fw-semibold text-secondary mb-1">Mode Ukuran Gambar</label>
+                                    <select class="form-select form-select-sm" id="wp-select-mode-${winEl.id}">
+                                        <option value="cover">Cover (Penuh Layar - Rekomendasi)</option>
+                                        <option value="contain">Contain (Pas di Dalam Layar)</option>
+                                        <option value="center">Center (Tengah Asli)</option>
+                                        <option value="repeat">Repeat (Ubin Berulang)</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <label class="form-label small fw-semibold text-secondary mb-0">Redupkan Background</label>
+                                        <span class="badge bg-secondary-subtle text-secondary font-monospace" id="wp-dimmer-val-${winEl.id}">0%</span>
+                                    </div>
+                                    <input type="range" class="form-range" id="wp-slider-dimmer-${winEl.id}" min="0" max="60" step="5" value="0">
+                                    <div class="form-text text-muted" style="font-size: 10px;">Membantu teks & ikon window tetap terbaca jelas.</div>
+                                </div>
+                                <div class="mb-0">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <label class="form-label small fw-semibold text-secondary mb-0">Efek Buram (Blur)</label>
+                                        <span class="badge bg-secondary-subtle text-secondary font-monospace" id="wp-blur-val-${winEl.id}">0px</span>
+                                    </div>
+                                    <input type="range" class="form-range" id="wp-slider-blur-${winEl.id}" min="0" max="10" step="1" value="0">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Kolom Kanan: Area Upload & Koleksi Preset -->
+                    <div class="col-12 col-md-7">
+                        <!-- Dropzone Upload Gambar -->
+                        <div class="card border shadow-sm mb-3">
+                            <div class="card-header bg-light py-2 px-3 border-bottom">
+                                <span class="fw-semibold small text-dark"><i class="fa-solid fa-cloud-arrow-up me-1 text-primary"></i> Unggah Gambar Sendiri</span>
+                            </div>
+                            <div class="card-body p-3">
+                                <div class="wd-dropzone" id="wp-dropzone-${winEl.id}">
+                                    <i class="fa-solid fa-arrow-up-from-bracket fs-3 text-primary mb-2 d-block"></i>
+                                    <div class="fw-semibold text-dark small mb-1">Pilih berkas gambar atau seret langsung ke sini</div>
+                                    <div class="text-muted" style="font-size: 11px;">Mendukung format PNG, JPG, WEBP, GIF, SVG (Maks. 10MB)</div>
+                                    <input type="file" id="wp-file-input-${winEl.id}" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" class="d-none">
+                                </div>
+                                <div id="wp-upload-progress-${winEl.id}" class="mt-2 d-none">
+                                    <div class="progress" style="height: 5px;">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width: 100%;"></div>
+                                    </div>
+                                    <div class="text-center text-muted small mt-1" style="font-size: 11px;">Mengunggah gambar ke server...</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Pilihan Preset Modern -->
+                        <div class="card border shadow-sm">
+                            <div class="card-header bg-light py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
+                                <span class="fw-semibold small text-dark"><i class="fa-solid fa-palette me-1 text-info"></i> Koleksi Preset Modern</span>
+                                <span class="badge bg-primary-subtle text-primary" style="font-size: 10px;">Pilihan Cepat</span>
+                            </div>
+                            <div class="card-body p-3">
+                                <div class="row g-2" id="wp-preset-container-${winEl.id}">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. Footer Bar Status Modul -->
+            <div class="py-1 px-3 bg-light border-top d-flex justify-content-between align-items-center text-muted flex-shrink-0" style="font-size: 11px;">
+                <span>Latar Belakang Desktop &bull; Pengaturan tersimpan secara realtime</span>
+                <span id="wp-footer-status-${winEl.id}">Status: Terhubung</span>
+            </div>
+        `;
+
+        const previewScreen = body.querySelector(`#wp-preview-screen-${winEl.id}`);
+        const previewDimmer = body.querySelector(`#wp-preview-dimmer-${winEl.id}`);
+        const previewCaption = body.querySelector(`#wp-preview-caption-${winEl.id}`);
+        const selectMode = body.querySelector(`#wp-select-mode-${winEl.id}`);
+        const sliderDimmer = body.querySelector(`#wp-slider-dimmer-${winEl.id}`);
+        const valDimmer = body.querySelector(`#wp-dimmer-val-${winEl.id}`);
+        const sliderBlur = body.querySelector(`#wp-slider-blur-${winEl.id}`);
+        const valBlur = body.querySelector(`#wp-blur-val-${winEl.id}`);
+        const dropzone = body.querySelector(`#wp-dropzone-${winEl.id}`);
+        const fileInput = body.querySelector(`#wp-file-input-${winEl.id}`);
+        const uploadProgress = body.querySelector(`#wp-upload-progress-${winEl.id}`);
+        const presetContainer = body.querySelector(`#wp-preset-container-${winEl.id}`);
+        const btnReset = body.querySelector(`#wp-btn-reset-${winEl.id}`);
+
+        const presets = [
+            {
+                id: 'preset-cyber',
+                name: 'Deep Cyber Mesh',
+                gradient: 'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%)',
+                desc: 'Dark Minimalist'
+            },
+            {
+                id: 'preset-aurora',
+                name: 'Neon Aurora',
+                gradient: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 40%, #4c1d95 70%, #831843 100%)',
+                desc: 'Vibrant Violet'
+            },
+            {
+                id: 'preset-nordic',
+                name: 'Nordic Calm',
+                gradient: 'linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)',
+                desc: 'Cool Slate'
+            },
+            {
+                id: 'preset-sunset',
+                name: 'Sunset Glow',
+                gradient: 'linear-gradient(135deg, #2b1055 0%, #7597de 100%)',
+                desc: 'Warm Twilight'
+            },
+            {
+                id: 'preset-emerald',
+                name: 'Emerald Forest',
+                gradient: 'linear-gradient(135deg, #064e3b 0%, #047857 50%, #0f172a 100%)',
+                desc: 'Calm Green'
+            },
+            {
+                id: 'preset-clean',
+                name: 'Slate Polos (Default)',
+                gradient: '',
+                desc: 'Sistem Default'
+            }
+        ];
+
+        const updateMiniPreview = (cfg) => {
+            if (!previewScreen) return;
+            if (cfg.type === 'image' && cfg.url) {
+                previewScreen.style.backgroundImage = `url("${cfg.url}")`;
+                previewScreen.style.backgroundSize = cfg.mode || 'cover';
+                previewScreen.style.backgroundRepeat = cfg.mode === 'repeat' ? 'repeat' : 'no-repeat';
+                previewScreen.style.backgroundPosition = 'center';
+                previewScreen.style.filter = cfg.blur ? `blur(${cfg.blur}px)` : 'none';
+                if (previewCaption) previewCaption.textContent = cfg.filename ? `Kustom: ${cfg.filename}` : 'Gambar Kustom';
+            } else if (cfg.type === 'gradient' && cfg.gradient) {
+                previewScreen.style.backgroundImage = cfg.gradient;
+                previewScreen.style.backgroundSize = 'cover';
+                previewScreen.style.filter = 'none';
+                if (previewCaption) previewCaption.textContent = `Preset: ${cfg.name || 'Gradient'}`;
+            } else {
+                previewScreen.style.backgroundImage = 'none';
+                previewScreen.style.backgroundColor = '#f1f5f9';
+                previewScreen.style.filter = 'none';
+                if (previewCaption) previewCaption.textContent = 'Default Workspace';
+            }
+
+            if (previewDimmer) {
+                const dim = parseInt(cfg.dimmer, 10) || 0;
+                if (dim > 0) {
+                    previewDimmer.classList.remove('d-none');
+                    previewDimmer.style.background = `rgba(0,0,0,${dim / 100})`;
+                } else {
+                    previewDimmer.classList.add('d-none');
+                }
+            }
+        };
+
+        const syncControlsFromConfig = () => {
+            const cfg = this._wallpaperConfig || {};
+            if (selectMode) selectMode.value = cfg.mode || 'cover';
+            if (sliderDimmer) sliderDimmer.value = cfg.dimmer || 0;
+            if (valDimmer) valDimmer.textContent = `${cfg.dimmer || 0}%`;
+            if (sliderBlur) sliderBlur.value = cfg.blur || 0;
+            if (valBlur) valBlur.textContent = `${cfg.blur || 0}px`;
+            updateMiniPreview(cfg);
+        };
+
+        // Render kartu-kartu preset
+        if (presetContainer) {
+            presetContainer.innerHTML = presets.map(p => `
+                <div class="col-6 col-sm-4">
+                    <div class="wd-wallpaper-card card border shadow-sm p-1" data-preset-id="${p.id}" style="cursor: pointer;">
+                        <div class="rounded mb-1" style="height: 52px; background: ${p.gradient || '#f1f5f9'}; border: 1px solid rgba(0,0,0,0.08);"></div>
+                        <div class="fw-semibold text-dark text-truncate" style="font-size: 11px;">${p.name}</div>
+                        <div class="text-muted text-truncate" style="font-size: 9px;">${p.desc}</div>
+                    </div>
+                </div>
+            `).join('');
+
+            presetContainer.querySelectorAll('.wd-wallpaper-card').forEach(card => {
+                card.addEventListener('click', () => {
+                    const presetId = card.getAttribute('data-preset-id');
+                    const preset = presets.find(p => p.id === presetId);
+                    if (preset) {
+                        if (preset.gradient) {
+                            this.applyWallpaper({
+                                type: 'gradient',
+                                gradient: preset.gradient,
+                                name: preset.name,
+                                mode: 'cover',
+                                dimmer: parseInt(sliderDimmer?.value, 10) || 0,
+                                blur: 0
+                            });
+                        } else {
+                            this.applyWallpaper({
+                                type: 'none',
+                                url: '',
+                                gradient: '',
+                                mode: 'cover',
+                                dimmer: 0,
+                                blur: 0
+                            });
+                        }
+                        syncControlsFromConfig();
+                        this.showToast('Wallpaper Diterapkan', `Preset "${preset.name}" berhasil diterapkan.`, 'success');
+                    }
+                });
+            });
+        }
+
+        // Dropzone interactions
+        if (dropzone && fileInput) {
+            dropzone.addEventListener('click', () => fileInput.click());
+
+            dropzone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropzone.classList.add('dragover');
+            });
+
+            dropzone.addEventListener('dragleave', () => {
+                dropzone.classList.remove('dragover');
+            });
+
+            dropzone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropzone.classList.remove('dragover');
+                const files = e.dataTransfer?.files;
+                if (files && files.length > 0) {
+                    this.uploadAndApplyWallpaper(files[0]);
+                }
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                    if (uploadProgress) uploadProgress.classList.remove('d-none');
+                    this.uploadAndApplyWallpaper(file).finally(() => {
+                        if (uploadProgress) uploadProgress.classList.add('d-none');
+                        fileInput.value = '';
+                    });
+                }
+            });
+        }
+
+        // Controls input listeners
+        if (selectMode) {
+            selectMode.addEventListener('change', (e) => {
+                this.applyWallpaper(Object.assign({}, this._wallpaperConfig, {
+                    mode: e.target.value
+                }));
+                syncControlsFromConfig();
+            });
+        }
+
+        if (sliderDimmer) {
+            sliderDimmer.addEventListener('input', (e) => {
+                const val = parseInt(e.target.value, 10);
+                if (valDimmer) valDimmer.textContent = `${val}%`;
+                this.applyWallpaper(Object.assign({}, this._wallpaperConfig, {
+                    dimmer: val
+                }));
+                syncControlsFromConfig();
+            });
+        }
+
+        if (sliderBlur) {
+            sliderBlur.addEventListener('input', (e) => {
+                const val = parseInt(e.target.value, 10);
+                if (valBlur) valBlur.textContent = `${val}px`;
+                this.applyWallpaper(Object.assign({}, this._wallpaperConfig, {
+                    blur: val
+                }));
+                syncControlsFromConfig();
+            });
+        }
+
+        if (btnReset) {
+            btnReset.addEventListener('click', () => {
+                this.resetWallpaper();
+                syncControlsFromConfig();
+            });
+        }
+
+        // Sinkronisasi awal
+        syncControlsFromConfig();
+
+        // Listener event update agar preview tetap sinkron jika diubah dari tempat lain
+        const updateListener = () => syncControlsFromConfig();
+        document.addEventListener('syntaxcore:wallpaper-updated', updateListener);
+        winEl.addEventListener('DOMNodeRemoved', () => {
+            document.removeEventListener('syntaxcore:wallpaper-updated', updateListener);
+        });
     }
 
     /**

@@ -131,6 +131,29 @@ class Request
         return $all[$key] ?? $default;
     }
 
+    /**
+     * Retrieve an uploaded file or all files.
+     */
+    public function file(?string $key = null): mixed
+    {
+        if (is_null($key)) {
+            return $this->files;
+        }
+        return $this->files[$key] ?? null;
+    }
+
+    /**
+     * Check if an uploaded file exists and has no error.
+     */
+    public function hasFile(string $key): bool
+    {
+        $file = $this->file($key);
+        if (!is_array($file)) {
+            return false;
+        }
+        return isset($file['tmp_name']) && !empty($file['tmp_name']) && ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK;
+    }
+
     public function all(): array
     {
         return array_merge($this->query, $this->post, $this->params);

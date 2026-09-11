@@ -6,5 +6,7 @@
 !/storage/logs/.gitkeep
 !/storage/cache/.gitkeep
 !/storage/uploads/.gitkeep
+/public/uploads/wallpapers/*
+!/public/uploads/wallpapers/.gitkeep
 .phpunit.result.cache
 *.tmp

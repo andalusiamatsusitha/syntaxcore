@@ -21,6 +21,10 @@ $router->group(['middleware' => 'csrf'], function (Router $router) {
         $router->get('/notifications', [DashboardController::class, 'notifications']);
         $router->post('/notifications/read-all', [DashboardController::class, 'markAllNotificationsRead']);
         $router->post('/notifications/{id}/read', [DashboardController::class, 'markNotificationRead']);
+        $router->get('/profile', [DashboardController::class, 'profile']);
+        $router->put('/profile', [DashboardController::class, 'updateProfile']);
+        $router->post('/wallpaper', [DashboardController::class, 'uploadWallpaper']);
+        $router->delete('/wallpaper', [DashboardController::class, 'deleteWallpaper']);
         $router->post('/logout', [AuthController::class, 'logout']);
 
         // Routes accessible by: admin and superadmin (Level 2+)

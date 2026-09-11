@@ -982,6 +982,233 @@ $t->test('Activity Logging & Notifications Architecture', function ($t) use ($ba
     $auth->logout();
 });
 
+$t->test('User Profile Module (GET /admin/profile & PUT /admin/profile)', function ($t) use ($baseDir) {
+    /** @var \Core\Application\Application $app */
+    $app = require $baseDir . '/bootstrap/app.php';
+    $kernel = $app->make(\Core\Application\Kernel::class);
+    $auth = $app->make(\App\Services\AuthService::class);
+
+    // 1. Unauthenticated request: JSON returns 401, browser returns 302 redirect
+    $guestApiReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/admin/profile',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $guestApiRes = $kernel->handle($guestApiReq);
+    $t->assertEquals(401, $guestApiRes->getStatusCode(), 'Guest JSON request to /admin/profile must return 401');
+
+    $guestBrowserReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/admin/profile',
+        'HTTP_ACCEPT' => 'text/html',
+    ]);
+    $guestBrowserRes = $kernel->handle($guestBrowserReq);
+    $t->assertEquals(302, $guestBrowserRes->getStatusCode(), 'Guest browser request to /admin/profile must redirect (302)');
+
+    // 2. Login as Superadmin
+    $auth->attempt('admin@syntaxcore.com', 'admin123');
+    $token = \Core\Security\Csrf::token();
+    $currentUser = $auth->user();
+
+    // 3. GET /admin/profile
+    $getReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/admin/profile',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $getRes = $kernel->handle($getReq);
+    $t->assertEquals(200, $getRes->getStatusCode());
+    $getData = json_decode($getRes->getContent(), true);
+    $t->assertEquals('success', $getData['status'] ?? null);
+    $t->assertEquals('admin@syntaxcore.com', $getData['user']['email'] ?? null);
+    $t->assert(isset($getData['recent_activities']), 'Must contain recent_activities');
+
+    // 4. PUT /admin/profile - Validation: invalid email
+    $invEmailReq = new \Core\Http\Request([], [
+        '_token' => $token,
+        'name' => 'Admin Updated',
+        'email' => 'invalid-email-format',
+    ], [
+        'REQUEST_METHOD' => 'PUT',
+        'REQUEST_URI' => '/admin/profile',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $invEmailRes = $kernel->handle($invEmailReq);
+    $t->assertEquals(422, $invEmailRes->getStatusCode());
+
+    // 5. PUT /admin/profile - Validation: wrong current password
+    $wrongPassReq = new \Core\Http\Request([], [
+        '_token' => $token,
+        'name' => 'Admin Updated',
+        'email' => 'admin@syntaxcore.com',
+        'current_password' => 'wrongpassword',
+        'new_password' => 'newpassword123',
+        'confirm_password' => 'newpassword123',
+    ], [
+        'REQUEST_METHOD' => 'PUT',
+        'REQUEST_URI' => '/admin/profile',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $wrongPassRes = $kernel->handle($wrongPassReq);
+    $t->assertEquals(422, $wrongPassRes->getStatusCode());
+
+    // 6. PUT /admin/profile - Validation: password confirmation mismatch
+    $mismatchReq = new \Core\Http\Request([], [
+        '_token' => $token,
+        'name' => 'Admin Updated',
+        'email' => 'admin@syntaxcore.com',
+        'current_password' => 'admin123',
+        'new_password' => 'newpassword123',
+        'confirm_password' => 'mismatched123',
+    ], [
+        'REQUEST_METHOD' => 'PUT',
+        'REQUEST_URI' => '/admin/profile',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $mismatchRes = $kernel->handle($mismatchReq);
+    $t->assertEquals(422, $mismatchRes->getStatusCode());
+
+    // 7. PUT /admin/profile - Valid update (name change)
+    $originalName = $currentUser->name;
+    $validUpdateReq = new \Core\Http\Request([], [
+        '_token' => $token,
+        'name' => 'Super Administrator Live',
+        'email' => 'admin@syntaxcore.com',
+    ], [
+        'REQUEST_METHOD' => 'PUT',
+        'REQUEST_URI' => '/admin/profile',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $validUpdateRes = $kernel->handle($validUpdateReq);
+    $t->assertEquals(200, $validUpdateRes->getStatusCode());
+    $updateData = json_decode($validUpdateRes->getContent(), true);
+    $t->assertEquals('success', $updateData['status'] ?? null);
+    $t->assertEquals('Super Administrator Live', $updateData['user']['name'] ?? null);
+
+    // Verify activity log was recorded
+    $logCheck = \Core\Database\Connection::selectOne(
+        "SELECT * FROM `activity_logs` WHERE `user_id` = ? AND `action` = 'user.profile_update' ORDER BY `id` DESC LIMIT 1",
+        [$currentUser->id]
+    );
+    $t->assert($logCheck !== null, 'Profile update activity log must be generated');
+
+    // Restore original name
+    $restoreReq = new \Core\Http\Request([], [
+        '_token' => $token,
+        'name' => $originalName,
+        'email' => 'admin@syntaxcore.com',
+    ], [
+        'REQUEST_METHOD' => 'PUT',
+        'REQUEST_URI' => '/admin/profile',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $kernel->handle($restoreReq);
+
+    $auth->logout();
+});
+
+$t->test('Desktop Wallpaper Upload & Customization Architecture', function ($t) use ($baseDir) {
+    /** @var \Core\Application\Application $app */
+    $app = require $baseDir . '/bootstrap/app.php';
+    $kernel = $app->make(\Core\Application\Kernel::class);
+    $auth = $app->make(\App\Services\AuthService::class);
+
+    // 1. Guest request with valid CSRF to POST /admin/wallpaper returns 401 (blocked by auth middleware)
+    $guestToken = \Core\Security\Csrf::token();
+    $guestReq = new \Core\Http\Request([], [
+        '_token' => $guestToken,
+    ], [
+        'REQUEST_METHOD' => 'POST',
+        'REQUEST_URI' => '/admin/wallpaper',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $guestRes = $kernel->handle($guestReq);
+    $t->assertEquals(401, $guestRes->getStatusCode(), 'Guest request to POST /admin/wallpaper must return 401');
+
+    // 2. Login as Superadmin
+    $auth->attempt('admin@syntaxcore.com', 'admin123');
+    $token = \Core\Security\Csrf::token();
+
+    // 3. POST /admin/wallpaper without file -> 422
+    $noFileReq = new \Core\Http\Request([], [
+        '_token' => $token,
+    ], [
+        'REQUEST_METHOD' => 'POST',
+        'REQUEST_URI' => '/admin/wallpaper',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $noFileRes = $kernel->handle($noFileReq);
+    $t->assertEquals(422, $noFileRes->getStatusCode());
+
+    // 4. POST /admin/wallpaper with invalid file format (.txt) -> 422
+    $tmpTxt = tempnam(sys_get_temp_dir(), 'test_wp') . '.txt';
+    file_put_contents($tmpTxt, 'dummy text content');
+    $invalidFileReq = new \Core\Http\Request([], [
+        '_token' => $token,
+    ], [
+        'REQUEST_METHOD' => 'POST',
+        'REQUEST_URI' => '/admin/wallpaper',
+        'HTTP_ACCEPT' => 'application/json',
+    ], [], [
+        'wallpaper' => [
+            'name' => 'document.txt',
+            'type' => 'text/plain',
+            'tmp_name' => $tmpTxt,
+            'error' => UPLOAD_ERR_OK,
+            'size' => filesize($tmpTxt),
+        ]
+    ]);
+    $invalidFileRes = $kernel->handle($invalidFileReq);
+    $t->assertEquals(422, $invalidFileRes->getStatusCode());
+    @unlink($tmpTxt);
+
+    // 5. POST /admin/wallpaper with valid PNG image -> 200
+    $pngContent = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+    $tmpPng = tempnam(sys_get_temp_dir(), 'test_wp') . '.png';
+    file_put_contents($tmpPng, $pngContent);
+
+    $validFileReq = new \Core\Http\Request([], [
+        '_token' => $token,
+    ], [
+        'REQUEST_METHOD' => 'POST',
+        'REQUEST_URI' => '/admin/wallpaper',
+        'HTTP_ACCEPT' => 'application/json',
+    ], [], [
+        'wallpaper' => [
+            'name' => 'desktop_bg.png',
+            'type' => 'image/png',
+            'tmp_name' => $tmpPng,
+            'error' => UPLOAD_ERR_OK,
+            'size' => filesize($tmpPng),
+        ]
+    ]);
+    $validFileRes = $kernel->handle($validFileReq);
+    $t->assertEquals(200, $validFileRes->getStatusCode());
+    $uploadData = json_decode($validFileRes->getContent(), true);
+    $t->assertEquals('success', $uploadData['status'] ?? null);
+    $t->assert(str_starts_with($uploadData['url'] ?? '', '/uploads/wallpapers/'), 'URL must point to /uploads/wallpapers/');
+
+    $savedFilePath = $baseDir . '/public' . $uploadData['url'];
+    $t->assert(file_exists($savedFilePath), 'Uploaded wallpaper file must exist in public/uploads/wallpapers/');
+
+    // 6. DELETE /admin/wallpaper -> 200
+    $delReq = new \Core\Http\Request([], [
+        '_token' => $token,
+    ], [
+        'REQUEST_METHOD' => 'DELETE',
+        'REQUEST_URI' => '/admin/wallpaper',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $delRes = $kernel->handle($delReq);
+    $t->assertEquals(200, $delRes->getStatusCode());
+
+    // Clean up temporary testing files
+    @unlink($tmpPng);
+    @unlink($savedFilePath);
+
+    $auth->logout();
+});
+
 // Print final summary
 exit($t->summary());
 
