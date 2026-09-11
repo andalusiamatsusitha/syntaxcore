@@ -30,20 +30,20 @@
     <div style="display: none;"><?= csrf_field() ?></div>
 
     <!-- Bootstrap JS Bundle -->
-    <script src="/assets/vendor/bootstrap/js/bootstrap.bundle.min.js" defer></script>
+    <script src="/assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
     <!-- Window Core JS -->
-    <script src="/assets/js/window/core.js" defer></script>
+    <script src="/assets/js/window/core.js"></script>
     <!-- SyntaxCore App JS -->
-    <script src="/assets/js/app.js" defer></script>
+    <script src="/assets/js/app.js"></script>
 
     <!-- Inisialisasi Window Client -->
     <script>
-        (function () {
+        document.addEventListener('DOMContentLoaded', function () {
             window.adminApp = new Core("init", {
                 userName: "<?= htmlspecialchars($user?->name ?? 'Administrator') ?>",
                 userEmail: "<?= htmlspecialchars($user?->email ?? '') ?>"
             });
-        })();
+        });
     </script>
 </body>
 
