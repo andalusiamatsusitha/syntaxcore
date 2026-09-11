@@ -712,5 +712,101 @@ $t->test('Logout requires CSRF, clears session, and revokes protected access', f
     }
 });
 
+// ==========================================
+// 10. ROLE-BASED ACCESS CONTROL (RBAC) MODULE
+// ==========================================
+$t->suite('Role-Based Access Control (RBAC) Architecture');
+
+$t->test('Parameterized middleware resolves route arguments and executes pipeline', function ($t) use ($baseDir) {
+    $executionLog = [];
+
+    $mRole = new class($executionLog) implements \Core\Middleware\MiddlewareInterface {
+        public function __construct(private array &$log) {}
+        public function handle(\Core\Http\Request $request, \Closure $next, ...$roles): mixed {
+            $this->log[] = 'role:' . implode(',', $roles);
+            return $next($request);
+        }
+    };
+
+    $app = require $baseDir . '/bootstrap/app.php';
+    $kernel = new \Core\Application\Kernel($app, new \Core\Routing\Router($app));
+
+    $kernel->setRouteMiddleware(['role' => $mRole]);
+
+    $router = $kernel->getRouter();
+    $router->get('/rbac-param-test', function () use (&$executionLog) {
+        $executionLog[] = 'destination';
+        return ['ok' => true];
+    })->middleware('role:admin,superadmin');
+
+    $req = new \Core\Http\Request([], [], ['REQUEST_METHOD' => 'GET', 'REQUEST_URI' => '/rbac-param-test']);
+    $kernel->handle($req);
+
+    $t->assertEquals(['role:admin,superadmin', 'destination'], $executionLog);
+});
+
+$t->test('RBAC middleware enforces role restrictions (403 for unauthorized, 200 for authorized)', function ($t) use ($baseDir) {
+    $app = require $baseDir . '/bootstrap/app.php';
+    $kernel = $app->make(\Core\Application\Kernel::class);
+    $auth = new \App\Services\AuthService();
+
+    // 1. Guest request with Accept: application/json -> 401
+    $auth->logout();
+    $guestReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/admin/users',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $guestRes = $kernel->handle($guestReq);
+    $t->assertEquals(401, $guestRes->getStatusCode());
+
+    // 2. Regular User (role: user) accessing /admin/users -> 403 Forbidden
+    $auth->attempt('user@syntaxcore.com', 'user123');
+    $userReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/admin/users',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $userRes = $kernel->handle($userReq);
+    $t->assertEquals(403, $userRes->getStatusCode());
+
+    // 3. Administrator (role: admin) accessing /admin/users -> 200 OK
+    $auth->attempt('manager@syntaxcore.com', 'manager123');
+    $adminReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/admin/users',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $adminRes = $kernel->handle($adminReq);
+    $t->assertEquals(200, $adminRes->getStatusCode());
+    $adminData = json_decode($adminRes->getContent(), true);
+    $t->assertEquals('success', $adminData['status'] ?? null);
+
+    // Administrator accessing superadmin-only /admin/settings -> 403 Forbidden
+    $adminSettingsReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/admin/settings',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $adminSettingsRes = $kernel->handle($adminSettingsReq);
+    $t->assertEquals(403, $adminSettingsRes->getStatusCode());
+
+    // 4. Super Administrator (role: superadmin) accessing /admin/settings -> 200 OK
+    $auth->attempt('admin@syntaxcore.com', 'admin123');
+    $superSettingsReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/admin/settings',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $superSettingsRes = $kernel->handle($superSettingsReq);
+    $t->assertEquals(200, $superSettingsRes->getStatusCode());
+    $superData = json_decode($superSettingsRes->getContent(), true);
+    $t->assertEquals('success', $superData['status'] ?? null);
+    $t->assertEquals('Pengaturan Sistem', $superData['module'] ?? null);
+
+    // Logout
+    $auth->logout();
+});
+
 // Print final summary
 exit($t->summary());

@@ -7,6 +7,7 @@ use Core\Exceptions\HttpException;
 use Core\Http\Request;
 use Core\Http\Response;
 use Core\Middleware\Pipeline;
+use Core\Middleware\ParameterizedMiddleware;
 use Closure;
 use ReflectionMethod;
 use ReflectionFunction;
@@ -165,11 +166,24 @@ class Router
     {
         $resolved = [];
         foreach ($route->getMiddleware() as $middleware) {
-            if (is_string($middleware) && isset($this->middlewareAliases[$middleware])) {
-                $resolved[] = $this->middlewareAliases[$middleware];
-            } else {
-                $resolved[] = $middleware;
+            if (is_string($middleware)) {
+                // Check if middleware has parameters (e.g. "role:admin,superadmin" or "level:2")
+                if (str_contains($middleware, ':')) {
+                    [$alias, $paramStr] = explode(':', $middleware, 2);
+                    $params = array_map('trim', explode(',', $paramStr));
+                    $target = $this->middlewareAliases[$alias] ?? $alias;
+
+                    $resolved[] = new ParameterizedMiddleware($target, $params, $this->container);
+                    continue;
+                }
+
+                if (isset($this->middlewareAliases[$middleware])) {
+                    $resolved[] = $this->middlewareAliases[$middleware];
+                    continue;
+                }
             }
+
+            $resolved[] = $middleware;
         }
 
         if (empty($this->middlewarePriority)) {
@@ -184,8 +198,8 @@ class Router
         $priorityMap = array_flip($this->middlewarePriority);
 
         usort($middlewares, function ($a, $b) use ($priorityMap) {
-            $aName = is_string($a) ? $a : (is_object($a) ? get_class($a) : '');
-            $bName = is_string($b) ? $b : (is_object($b) ? get_class($b) : '');
+            $aName = is_string($a) ? $a : ($a instanceof ParameterizedMiddleware ? $a->getTargetClass() : (is_object($a) ? get_class($a) : ''));
+            $bName = is_string($b) ? $b : ($b instanceof ParameterizedMiddleware ? $b->getTargetClass() : (is_object($b) ? get_class($b) : ''));
 
             $priorityA = $priorityMap[$aName] ?? PHP_INT_MAX;
             $priorityB = $priorityMap[$bName] ?? PHP_INT_MAX;

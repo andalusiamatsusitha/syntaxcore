@@ -17,6 +17,14 @@ class Authenticate implements MiddlewareInterface
     public function handle(Request $request, Closure $next): mixed
     {
         if ($this->auth->guest()) {
+            if ($request->wantsJson() || $request->isJson() || str_starts_with($request->path(), '/admin/api')) {
+                return Response::json([
+                    'error' => true,
+                    'status' => 401,
+                    'message' => 'Unauthenticated. Silakan login terlebih dahulu.',
+                ], 401);
+            }
+
             return Response::redirect('/admin/login');
         }
 

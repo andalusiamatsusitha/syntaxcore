@@ -27,6 +27,8 @@ return [
         'auth' => \App\Middleware\Authenticate::class,
         'guest' => \App\Middleware\RedirectIfAuthenticated::class,
         'csrf' => \App\Middleware\VerifyCsrfToken::class,
+        'role' => \App\Middleware\RequireRole::class,
+        'level' => \App\Middleware\RequireLevel::class,
     ],
 
     /*
@@ -41,6 +43,8 @@ return [
     'priority' => [
         \App\Middleware\VerifyCsrfToken::class,
         \App\Middleware\Authenticate::class,
+        \App\Middleware\RequireRole::class,
+        \App\Middleware\RequireLevel::class,
         \App\Middleware\RedirectIfAuthenticated::class,
     ],
 ];

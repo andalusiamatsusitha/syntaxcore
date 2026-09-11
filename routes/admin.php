@@ -14,10 +14,22 @@ $router->group(['middleware' => 'csrf'], function (Router $router) {
         $router->post('/login', [AuthController::class, 'login']);
     });
 
-    // Protected admin routes (accessible only by authenticated admins)
+    // Protected admin routes (accessible only by authenticated users)
     $router->group(['middleware' => 'auth'], function (Router $router) {
         $router->get('/', [DashboardController::class, 'index']);
         $router->get('/api/menus', [DashboardController::class, 'menus']);
         $router->post('/logout', [AuthController::class, 'logout']);
+
+        // Routes accessible by: admin and superadmin (Level 2+)
+        $router->group(['middleware' => 'role:admin,superadmin'], function (Router $router) {
+            $router->get('/users', [DashboardController::class, 'users']);
+            $router->get('/reports', [DashboardController::class, 'reports']);
+        });
+
+        // Routes accessible ONLY by: superadmin (Level 3)
+        $router->group(['middleware' => 'role:superadmin'], function (Router $router) {
+            $router->get('/database', [DashboardController::class, 'database']);
+            $router->get('/settings', [DashboardController::class, 'settings']);
+        });
     });
 });
