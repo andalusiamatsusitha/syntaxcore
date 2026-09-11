@@ -18,6 +18,7 @@ class WindowCore {
             containerId: 'wd-content',
             title: 'SyntaxCore Dynamic Window',
             header: true,
+            userName: 'Administrator',
             userRole: 'Administrator',
             roleSlug: 'admin',
             menus: [],
@@ -81,11 +82,31 @@ class WindowCore {
         this.container.innerHTML = `
             <div class="d-flex flex-column h-100" style="background-color: #f1f5f9;">
                 ${(this.options.header) ? `
-                <header class="py-2 px-4 bg-dark text-white">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span>activities</span>
-                        <span style="font-size: 12px;">${this.state.initializedAt.toLocaleTimeString()}</span>
-                        <span>icon</span>
+                <header class="py-2 px-4 bg-dark text-white user-select-none position-relative" style="font-size: 12px; line-height: 1.2;">
+                    <div class="d-flex justify-content-between align-items-center w-100">
+                        <!-- Sisi Kiri: Label Activities -->
+                        <div class="d-flex align-items-center">
+                            <span class="small text-white-50">Activities</span>
+                        </div>
+
+                        <!-- Sisi Tengah: Jam Berfungsi & Hari (Tepat di Tengah Header) -->
+                        <div class="position-absolute start-50 translate-middle-x text-center" style="pointer-events: none;">
+                            <span id="wd-header-clock" class="small fw-semibold text-white font-monospace" style="letter-spacing: 0.3px;">
+                                ${this.formatHeaderClock()}
+                            </span>
+                        </div>
+
+                        <!-- Sisi Kanan: Username, Role, dan Tombol Logout Teks -->
+                        <div class="d-flex align-items-center gap-2 small">
+                            <span class="text-white-50" id="wd-header-user-info">
+                                <span class="text-white fw-medium">${this.options.userName || 'Administrator'}</span>
+                                <span class="text-white-50 ms-1" style="font-size: 11px;">(${this.options.userRole || 'Administrator'})</span>
+                            </span>
+                            <span class="text-white-50 opacity-25">|</span>
+                            <button type="button" id="wd-header-logout" class="btn btn-link text-white-50 text-decoration-none p-0 small" style="font-size: 12px; line-height: 1; transition: color 0.15s ease;" title="Keluar dari sesi admin">
+                                Logout
+                            </button>
+                        </div>
                     </div>
                 </header>
                 ` : ''}
@@ -116,6 +137,77 @@ class WindowCore {
     attachEventListeners() {
         const btnMenu = document.getElementById('wp-menu');
         if (btnMenu) btnMenu.addEventListener('click', () => this.openMenuWindow(btnMenu));
+
+        // Jalankan jam header realtime
+        this.startHeaderClock();
+
+        // Pasang event tombol teks logout
+        const btnLogout = document.getElementById('wd-header-logout');
+        if (btnLogout) {
+            btnLogout.addEventListener('mouseenter', () => { btnLogout.style.color = '#ef4444'; });
+            btnLogout.addEventListener('mouseleave', () => { btnLogout.style.color = ''; });
+            btnLogout.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.handleLogout();
+            });
+        }
+    }
+
+    /**
+     * Memformat waktu untuk header bar dalam format: Day, hh:mm AM/PM (contoh: Fri, 12:05 PM)
+     * 
+     * @param {Date} date Objek tanggal/waktu
+     * @returns {string} String waktu terformat
+     */
+    formatHeaderClock(date = new Date()) {
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const day = days[date.getDay()];
+        let hours = date.getHours();
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12 || 12;
+        return `${day}, ${hours}:${minutes} ${ampm}`;
+    }
+
+    /**
+     * Memulai pembaruan jam header secara realtime setiap 1 detik
+     */
+    startHeaderClock() {
+        if (this._clockInterval) {
+            clearInterval(this._clockInterval);
+        }
+
+        const updateClock = () => {
+            const clockEl = document.getElementById('wd-header-clock');
+            if (clockEl) {
+                clockEl.textContent = this.formatHeaderClock();
+            }
+        };
+
+        updateClock();
+        this._clockInterval = setInterval(updateClock, 1000);
+    }
+
+    /**
+     * Menangani proses logout pengguna dari sistem dengan pengiriman form POST ber-CSRF token
+     */
+    handleLogout() {
+        const confirmed = confirm('Apakah Anda yakin ingin logout dari sistem?');
+        if (!confirmed) return;
+
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/admin/logout';
+        form.style.display = 'none';
+
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = '_token';
+        csrfInput.value = this.getCsrfToken();
+        form.appendChild(csrfInput);
+
+        document.body.appendChild(form);
+        form.submit();
     }
 
     openMenuWindow(btnMenu) {
