@@ -17,6 +17,9 @@ services:
       DB_DATABASE: "${DB_DATABASE:-syntaxcore}"
       DB_USERNAME: "${DB_USERNAME:-syntaxcore}"
       DB_PASSWORD: "${DB_PASSWORD:-secret}"
+      SEED_ADMIN_EMAIL: "${SEED_ADMIN_EMAIL:-admin@syntaxcore.com}"
+      SEED_ADMIN_PASSWORD: "${SEED_ADMIN_PASSWORD:-admin123}"
+      SEED_ADMIN_NAME: "${SEED_ADMIN_NAME:-Administrator}"
     volumes:
       - .:/var/www/html
     depends_on:

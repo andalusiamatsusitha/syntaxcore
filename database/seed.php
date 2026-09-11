@@ -3,6 +3,11 @@
 /**
  * SyntaxCore Database Seeder
  * Run via CLI: php database/seed.php
+ * 
+ * Supports environment variables:
+ * - SEED_ADMIN_EMAIL: Administrator email address
+ * - SEED_ADMIN_PASSWORD: Administrator password
+ * - SEED_ADMIN_NAME: Administrator display name
  */
 
 $baseDir = dirname(__DIR__);
@@ -18,22 +23,26 @@ use App\Models\User;
 echo "--- SyntaxCore Database Seeder ---\n";
 
 try {
-    $email = 'admin@syntaxcore.com';
+    $email = getenv('SEED_ADMIN_EMAIL') ?: 'admin@syntaxcore.com';
+    $password = getenv('SEED_ADMIN_PASSWORD') ?: 'admin123';
+    $name = getenv('SEED_ADMIN_NAME') ?: 'Administrator';
+
     $user = User::findByEmail($email);
 
     if (!$user) {
         $user = new User([
-            'name' => 'Administrator',
+            'name' => $name,
             'email' => $email,
             'created_at' => date('Y-m-d H:i:s'),
             'updated_at' => date('Y-m-d H:i:s'),
         ]);
-        $user->setPassword('admin123');
+        $user->setPassword($password);
         $user->save();
 
-        echo "[SUCCESS] Default administrator seeded successfully!\n";
+        echo "[SUCCESS] Administrator seeded successfully!\n";
+        echo "  Name    : {$name}\n";
         echo "  Email   : {$email}\n";
-        echo "  Password: admin123\n";
+        echo "  Password: [PROTECTED / CONFIGURABLE VIA SEED_ADMIN_PASSWORD]\n";
     } else {
         echo "[INFO] Administrator '{$email}' already exists.\n";
     }

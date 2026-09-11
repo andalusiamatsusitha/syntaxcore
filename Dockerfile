@@ -11,8 +11,8 @@ RUN apk add --no-cache \
     && apk del $PHPIZE_DEPS \
     && rm -rf /var/cache/apk/*
 
-# Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+# Install Composer (pinned for reproducible builds)
+COPY --from=composer:2.8 /usr/bin/composer /usr/bin/composer
 
 # Set working directory
 WORKDIR /var/www/html

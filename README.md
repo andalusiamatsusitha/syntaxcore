@@ -44,12 +44,13 @@ MySQL is accessible on host port `3306` (or `${FORWARD_DB_PORT}`):
 ## 📦 Useful Docker Commands
 
 ### Seed Administrator Account
-Populate the database with a default administrator user (`admin@syntaxcore.com` / `admin123`):
+Populate the database with an administrator user (credentials configurable via `SEED_ADMIN_EMAIL` and `SEED_ADMIN_PASSWORD` in `.env`):
 ```bash
 docker compose exec app composer seed
 # or
 docker compose exec app php database/seed.php
 ```
+> Default fallback for development: `admin@syntaxcore.com` / `admin123`. Never use default credentials in staging or production.
 
 ### Run Architecture & Integration Tests
 Execute the native 32-test integration suite:
