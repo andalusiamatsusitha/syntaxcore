@@ -25,6 +25,7 @@
         "sort-packages": true
     },
     "scripts": {
-        "test": "php tests/run.php"
+        "test": "php tests/run.php",
+        "seed": "php database/seed.php"
     }
 }
