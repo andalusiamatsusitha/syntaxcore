@@ -456,22 +456,29 @@ class WindowCore {
         winEl.setAttribute('data-action', item.action || '');
         winEl.setAttribute('data-route', item.route || '');
 
+        // Deteksi apakah ini modul Master Pengguna atau Data Peran (Roles)
+        const isUsersModule = (item.action === 'open_users') || (item.route === '/admin/users');
+        const isRolesModule = (item.action === 'open_roles') || (item.route === '/admin/roles');
+        const defaultWidth = isUsersModule ? 780 : (isRolesModule ? 840 : 440);
+        const defaultHeight = isUsersModule ? 520 : (isRolesModule ? 560 : 250);
+
         // Posisi default bertingkat (cascade offset)
         const offset = (this.state.windows.length % 6) * 24 + 30;
         winEl.style.cssText = `
             top: ${offset}px;
             left: ${offset}px;
-            width: 440px;
+            width: ${defaultWidth}px;
+            min-width: 380px;
+            height: ${defaultHeight}px;
             min-height: 250px;
-            height: 250px;
             z-index: ${100 + this.state.windows.length};
             background: #ffffff;
             border-radius: 8px;
         `;
         winEl.dataset.prevTop = `${offset}px`;
         winEl.dataset.prevLeft = `${offset}px`;
-        winEl.dataset.prevWidth = '440px';
-        winEl.dataset.prevHeight = '250px';
+        winEl.dataset.prevWidth = `${defaultWidth}px`;
+        winEl.dataset.prevHeight = `${defaultHeight}px`;
         winEl.dataset.isMaximized = 'false';
         winEl.dataset.snapState = 'none';
 
@@ -552,6 +559,13 @@ class WindowCore {
 
         // Tambahkan icon window ke toolbar footer di samping tombol menu
         this.addTaskbarItem(winId, item, winEl);
+
+        // Jika modul Manajemen Pengguna atau Peran, render antarmuka masing-masing
+        if (isUsersModule) {
+            this.renderUserManagement(winEl);
+        } else if (isRolesModule) {
+            this.renderRoleManagement(winEl);
+        }
 
         // Trigger custom event agar desain UI atau endpoint loader dapat di-hook oleh user
         document.dispatchEvent(new CustomEvent('syntaxcore:window-open', {
@@ -1262,6 +1276,1053 @@ class WindowCore {
     //     col.querySelector('.btn-close').addEventListener('click', () => col.remove());
     //     widgetContainer.appendChild(col);
     // }
+
+    /**
+     * Render Modul Master Data Pengguna ke dalam Body Window
+     * Menyediakan antarmuka CRUD pengguna lengkap (List, Search, Add, Edit, Delete)
+     * yang terhubung ke REST API /admin/users secara asinkron dengan CSRF protection.
+     * 
+     * @param {HTMLElement} winEl Elemen window
+     */
+    renderUserManagement(winEl) {
+        const body = winEl.querySelector('.wd-window-body');
+        if (!body) return;
+
+        body.className = 'wd-window-body card-body p-0 d-flex flex-column h-100 overflow-hidden';
+        body.innerHTML = `
+            <!-- 1. Toolbar Atas Modul Pengguna -->
+            <div class="py-2 px-3 bg-light border-bottom d-flex justify-content-between align-items-center gap-2 flex-wrap flex-shrink-0">
+                <div class="d-flex align-items-center gap-2 flex-grow-1" style="max-width: 320px;">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-magnifying-glass"></i></span>
+                        <input type="text" class="form-control border-start-0 ps-0" id="user-search-input-${winEl.id}" placeholder="Cari nama atau email..." autocomplete="off">
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle" id="user-count-badge-${winEl.id}">Memuat...</span>
+                    <button type="button" class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1 shadow-sm" id="btn-add-user-${winEl.id}">
+                        <i class="fa-solid fa-user-plus"></i>
+                        <span class="d-none d-sm-inline">Tambah User</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-refresh-user-${winEl.id}" title="Muat Ulang Data">
+                        <i class="fa-solid fa-arrows-rotate"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2. Alert Container -->
+            <div id="user-alert-${winEl.id}" class="d-none px-3 pt-2"></div>
+
+            <!-- 3. Form Input Drawer / Panel (Tersembunyi secara default) -->
+            <div id="user-form-panel-${winEl.id}" class="d-none bg-light-subtle border-bottom p-3 flex-shrink-0">
+                <form id="user-form-${winEl.id}" autocomplete="off">
+                    <input type="hidden" id="user-form-id-${winEl.id}">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold mb-0 text-dark" id="user-form-title-${winEl.id}">Tambah Pengguna Baru</h6>
+                        <button type="button" class="btn-close" id="btn-cancel-user-${winEl.id}" aria-label="Batal"></button>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label small fw-semibold mb-1 text-secondary">Nama Lengkap</label>
+                            <input type="text" class="form-control form-control-sm" id="user-input-name-${winEl.id}" placeholder="Contoh: Budi Santoso" required>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label small fw-semibold mb-1 text-secondary">Alamat Email</label>
+                            <input type="email" class="form-control form-control-sm" id="user-input-email-${winEl.id}" placeholder="nama@syntaxcore.com" required>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label small fw-semibold mb-1 text-secondary">Peran Akun (Role)</label>
+                            <select class="form-select form-select-sm" id="user-input-role-${winEl.id}" required>
+                                <option value="3">Regular User</option>
+                                <option value="2">Administrator</option>
+                                <option value="1">Super Administrator</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label small fw-semibold mb-1 text-secondary" id="user-label-password-${winEl.id}">Password</label>
+                            <input type="password" class="form-control form-control-sm" id="user-input-password-${winEl.id}" placeholder="Minimal 6 karakter" autocomplete="new-password">
+                            <div class="form-text" id="user-help-password-${winEl.id}" style="font-size: 11px;"></div>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-end gap-2 mt-3">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-close-form-${winEl.id}">Batal</button>
+                        <button type="submit" class="btn btn-sm btn-primary px-3" id="btn-submit-user-${winEl.id}">
+                            <i class="fa-solid fa-floppy-disk me-1"></i> Simpan
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 4. Area Tabel Pengguna -->
+            <div class="flex-grow-1 overflow-auto bg-white position-relative">
+                <table class="table table-hover table-striped mb-0 align-middle" style="font-size: 13px;">
+                    <thead class="table-light sticky-top border-bottom" style="z-index: 2;">
+                        <tr>
+                            <th class="py-2 px-3" style="width: 50px;">#</th>
+                            <th class="py-2 px-3">Nama Pengguna</th>
+                            <th class="py-2 px-3">Email</th>
+                            <th class="py-2 px-3" style="width: 140px;">Peran / Role</th>
+                            <th class="py-2 px-3 text-center" style="width: 70px;">Level</th>
+                            <th class="py-2 px-3 text-end" style="width: 110px;">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="user-tbody-${winEl.id}">
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-muted">
+                                <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                                Memuat data pengguna dari server...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 5. Footer Bar Status Modul -->
+            <div class="py-1 px-3 bg-light border-top d-flex justify-content-between align-items-center text-muted flex-shrink-0" style="font-size: 11px;">
+                <span>Modul Master Data Pengguna &bull; Terhubung ke <code>/admin/users</code></span>
+                <span id="user-role-status-${winEl.id}">Otorisasi: Admin</span>
+            </div>
+        `;
+
+        // Cache state data pada window element
+        winEl._userState = {
+            users: [],
+            roles: [],
+            filter: ''
+        };
+
+        const alertContainer = body.querySelector(`#user-alert-${winEl.id}`);
+        const countBadge = body.querySelector(`#user-count-badge-${winEl.id}`);
+        const tbody = body.querySelector(`#user-tbody-${winEl.id}`);
+        const searchInput = body.querySelector(`#user-search-input-${winEl.id}`);
+        const formPanel = body.querySelector(`#user-form-panel-${winEl.id}`);
+        const formTitle = body.querySelector(`#user-form-title-${winEl.id}`);
+        const userForm = body.querySelector(`#user-form-${winEl.id}`);
+        const inputId = body.querySelector(`#user-form-id-${winEl.id}`);
+        const inputName = body.querySelector(`#user-input-name-${winEl.id}`);
+        const inputEmail = body.querySelector(`#user-input-email-${winEl.id}`);
+        const inputRole = body.querySelector(`#user-input-role-${winEl.id}`);
+        const inputPassword = body.querySelector(`#user-input-password-${winEl.id}`);
+        const labelPassword = body.querySelector(`#user-label-password-${winEl.id}`);
+        const helpPassword = body.querySelector(`#user-help-password-${winEl.id}`);
+        const btnAdd = body.querySelector(`#btn-add-user-${winEl.id}`);
+        const btnRefresh = body.querySelector(`#btn-refresh-user-${winEl.id}`);
+        const btnCancel = body.querySelector(`#btn-cancel-user-${winEl.id}`);
+        const btnCloseForm = body.querySelector(`#btn-close-form-${winEl.id}`);
+        const roleStatus = body.querySelector(`#user-role-status-${winEl.id}`);
+
+        const showAlert = (message, type = 'success') => {
+            if (!alertContainer) return;
+            alertContainer.innerHTML = `
+                <div class="alert alert-${type} alert-dismissible fade show py-2 px-3 small mb-2 d-flex align-items-center justify-content-between" role="alert">
+                    <div>
+                        <i class="fa-solid ${type === 'success' ? 'fa-circle-check text-success' : 'fa-triangle-exclamation text-danger'} me-2"></i>
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+            alertContainer.classList.remove('d-none');
+            setTimeout(() => {
+                alertContainer.classList.add('d-none');
+            }, 4000);
+        };
+
+        const renderTable = () => {
+            const query = (winEl._userState.filter || '').trim().toLowerCase();
+            const filtered = winEl._userState.users.filter(u => {
+                if (!query) return true;
+                return (u.name && u.name.toLowerCase().includes(query)) ||
+                       (u.email && u.email.toLowerCase().includes(query)) ||
+                       (u.role_name && u.role_name.toLowerCase().includes(query));
+            });
+
+            if (countBadge) {
+                countBadge.textContent = `${filtered.length} dari ${winEl._userState.users.length} User`;
+            }
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center py-4 text-muted">
+                            <i class="fa-regular fa-folder-open d-block mb-1 fs-4 text-secondary"></i>
+                            ${query ? 'Tidak ada pengguna yang cocok dengan pencarian.' : 'Belum ada data pengguna.'}
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(u => {
+                let badgeClass = 'bg-secondary-subtle text-secondary border border-secondary-subtle';
+                if (u.role === 'superadmin' || u.level >= 3) {
+                    badgeClass = 'bg-danger-subtle text-danger border border-danger-subtle';
+                } else if (u.role === 'admin' || u.level === 2) {
+                    badgeClass = 'bg-primary-subtle text-primary border border-primary-subtle';
+                }
+
+                return `
+                    <tr data-user-id="${u.id}">
+                        <td class="px-3 text-muted small">${u.id}</td>
+                        <td class="px-3">
+                            <div class="fw-semibold text-dark">${u.name}</div>
+                        </td>
+                        <td class="px-3 text-muted">
+                            <code>${u.email}</code>
+                        </td>
+                        <td class="px-3">
+                            <span class="badge ${badgeClass} text-uppercase" style="font-size: 11px;">${u.role_name || u.role}</span>
+                        </td>
+                        <td class="px-3 text-center">
+                            <span class="badge bg-light text-dark border" style="font-size: 10px;">Lvl ${u.level || 1}</span>
+                        </td>
+                        <td class="px-3 text-end">
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-light btn-edit-user text-primary" data-user-id="${u.id}" title="Edit User">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
+                                <button type="button" class="btn btn-light btn-delete-user text-danger" data-user-id="${u.id}" title="Hapus User">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Pasang event edit
+            tbody.querySelectorAll('.btn-edit-user').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const userId = parseInt(btn.getAttribute('data-user-id'), 10);
+                    const user = winEl._userState.users.find(u => u.id === userId);
+                    if (!user) return;
+
+                    formTitle.textContent = `Edit Pengguna #${user.id} - ${user.name}`;
+                    inputId.value = user.id;
+                    inputName.value = user.name;
+                    inputEmail.value = user.email;
+                    inputRole.value = user.role_id || (user.role === 'superadmin' ? '1' : (user.role === 'admin' ? '2' : '3'));
+                    inputPassword.value = '';
+                    inputPassword.required = false;
+                    labelPassword.textContent = 'Ganti Password (Opsional)';
+                    helpPassword.textContent = 'Kosongkan jika tidak ingin mengubah password saat ini.';
+
+                    formPanel.classList.remove('d-none');
+                    inputName.focus();
+                });
+            });
+
+            // Pasang event delete
+            tbody.querySelectorAll('.btn-delete-user').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const userId = parseInt(btn.getAttribute('data-user-id'), 10);
+                    const user = winEl._userState.users.find(u => u.id === userId);
+                    if (!user) return;
+
+                    const confirmed = confirm(`Apakah Anda yakin ingin menghapus pengguna "${user.name}" (${user.email})?`);
+                    if (!confirmed) return;
+
+                    try {
+                        let result = null;
+                        if (window.SyntaxCore && typeof window.SyntaxCore.api === 'function') {
+                            result = await window.SyntaxCore.api(`/admin/users/${userId}`, { method: 'DELETE' });
+                        } else {
+                            const res = await fetch(`/admin/users/${userId}`, {
+                                method: 'DELETE',
+                                headers: {
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': this.getCsrfToken()
+                                }
+                            });
+                            result = await res.json();
+                            if (!res.ok) throw new Error(result?.message || 'Gagal menghapus user');
+                        }
+
+                        showAlert(result?.message || 'Pengguna berhasil dihapus', 'success');
+                        fetchData();
+                    } catch (err) {
+                        showAlert(err.message || 'Terjadi kesalahan saat menghapus pengguna', 'danger');
+                    }
+                });
+            });
+        };
+
+        const fetchData = async () => {
+            if (countBadge) countBadge.textContent = 'Memuat...';
+            try {
+                let data = null;
+                if (window.SyntaxCore && typeof window.SyntaxCore.api === 'function') {
+                    data = await window.SyntaxCore.api('/admin/users');
+                } else {
+                    const res = await fetch('/admin/users', {
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    });
+                    data = await res.json();
+                }
+
+                if (data && data.status === 'success') {
+                    winEl._userState.users = Array.isArray(data.users) ? data.users : [];
+                    winEl._userState.roles = Array.isArray(data.roles) ? data.roles : [];
+
+                    // Populate role select
+                    if (winEl._userState.roles.length > 0) {
+                        inputRole.innerHTML = winEl._userState.roles.map(r => `
+                            <option value="${r.id}">${r.name} (Level ${r.level})</option>
+                        `).join('');
+                    }
+
+                    if (roleStatus && data.authorized_role) {
+                        roleStatus.innerHTML = `Akses: <strong class="text-uppercase text-primary">${data.authorized_role}</strong> &bull; Total: <strong>${data.total ?? winEl._userState.users.length}</strong>`;
+                    }
+
+                    renderTable();
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-danger">Gagal memuat data pengguna: ${data?.message || 'Unknown error'}</td></tr>`;
+                }
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-danger">Gagal menghubungi server: ${err.message}</td></tr>`;
+            }
+        };
+
+        // Event listener toolbar
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                winEl._userState.filter = e.target.value;
+                renderTable();
+            });
+        }
+
+        if (btnRefresh) {
+            btnRefresh.addEventListener('click', () => {
+                fetchData();
+            });
+        }
+
+        if (btnAdd) {
+            btnAdd.addEventListener('click', () => {
+                formTitle.textContent = 'Tambah Pengguna Baru';
+                inputId.value = '';
+                inputName.value = '';
+                inputEmail.value = '';
+                inputPassword.value = '';
+                inputPassword.required = true;
+                labelPassword.textContent = 'Password Akun';
+                helpPassword.textContent = 'Wajib diisi minimal 6 karakter.';
+
+                formPanel.classList.remove('d-none');
+                inputName.focus();
+            });
+        }
+
+        const hideForm = () => {
+            formPanel.classList.add('d-none');
+            userForm.reset();
+        };
+
+        if (btnCancel) btnCancel.addEventListener('click', hideForm);
+        if (btnCloseForm) btnCloseForm.addEventListener('click', hideForm);
+
+        // Submit form (Create / Update)
+        if (userForm) {
+            userForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const userId = inputId.value ? parseInt(inputId.value, 10) : null;
+                const name = inputName.value.trim();
+                const email = inputEmail.value.trim();
+                const roleId = parseInt(inputRole.value, 10);
+                const password = inputPassword.value;
+
+                if (!name || !email) {
+                    showAlert('Nama dan email wajib diisi', 'danger');
+                    return;
+                }
+
+                if (!userId && !password) {
+                    showAlert('Password wajib diisi untuk pengguna baru', 'danger');
+                    return;
+                }
+
+                const payload = {
+                    name,
+                    email,
+                    role_id: roleId
+                };
+                if (password) {
+                    payload.password = password;
+                }
+
+                const submitBtn = body.querySelector(`#btn-submit-user-${winEl.id}`);
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Menyimpan...';
+                }
+
+                try {
+                    const url = userId ? `/admin/users/${userId}` : '/admin/users';
+                    const method = userId ? 'PUT' : 'POST';
+
+                    let result = null;
+                    if (window.SyntaxCore && typeof window.SyntaxCore.api === 'function') {
+                        result = await window.SyntaxCore.api(url, { method, body: payload });
+                    } else {
+                        const res = await fetch(url, {
+                            method: method,
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': this.getCsrfToken()
+                            },
+                            body: JSON.stringify(payload)
+                        });
+                        result = await res.json();
+                        if (!res.ok) throw new Error(result?.message || 'Gagal menyimpan data');
+                    }
+
+                    showAlert(result?.message || (userId ? 'Pengguna berhasil diperbarui' : 'Pengguna berhasil ditambahkan'), 'success');
+                    hideForm();
+                    fetchData();
+                } catch (err) {
+                    showAlert(err.message || 'Terjadi kesalahan saat menyimpan data', 'danger');
+                } finally {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<i class="fa-solid fa-floppy-disk me-1"></i> Simpan';
+                    }
+                }
+            });
+        }
+
+        // Ambil data pertama kali saat window dibuka
+        fetchData();
+    }
+
+    /**
+     * Merender antarmuka Modul Data Peran (Roles) & Hak Akses di dalam window desktop.
+     * Mengelola daftar peran, penambahan/perubahan peran, dan matriks izin menu (role_menu).
+     * 
+     * @param {HTMLElement} winEl Elemen window
+     */
+    renderRoleManagement(winEl) {
+        const body = winEl.querySelector('.wd-window-body');
+        if (!body) return;
+
+        body.className = 'wd-window-body card-body p-0 d-flex flex-column h-100 overflow-hidden';
+        body.innerHTML = `
+            <!-- 1. Toolbar Atas Modul Peran & Hak Akses -->
+            <div class="py-2 px-3 bg-light border-bottom d-flex justify-content-between align-items-center gap-2 flex-wrap flex-shrink-0">
+                <div class="d-flex align-items-center gap-2 flex-grow-1" style="max-width: 320px;">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-magnifying-glass"></i></span>
+                        <input type="text" class="form-control border-start-0 ps-0" id="role-search-input-${winEl.id}" placeholder="Cari peran, slug, deskripsi..." autocomplete="off">
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle" id="role-count-badge-${winEl.id}">Memuat...</span>
+                    <button type="button" class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1 shadow-sm" id="btn-add-role-${winEl.id}">
+                        <i class="fa-solid fa-plus"></i>
+                        <span class="d-none d-sm-inline">Tambah Peran</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-refresh-role-${winEl.id}" title="Muat Ulang Data">
+                        <i class="fa-solid fa-arrows-rotate"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2. Alert Container -->
+            <div id="role-alert-${winEl.id}" class="d-none px-3 pt-2"></div>
+
+            <!-- 3. Form Input Drawer / Panel (Tersembunyi secara default) -->
+            <div id="role-form-panel-${winEl.id}" class="d-none bg-light-subtle border-bottom p-3 flex-shrink-0" style="max-height: 70%; overflow-y: auto;">
+                <form id="role-form-${winEl.id}" autocomplete="off">
+                    <input type="hidden" id="role-form-id-${winEl.id}">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold mb-0 text-dark" id="role-form-title-${winEl.id}">Tambah Peran Baru</h6>
+                        <button type="button" class="btn-close" id="btn-cancel-role-${winEl.id}" aria-label="Batal"></button>
+                    </div>
+
+                    <div class="row g-2 mb-2">
+                        <div class="col-12 col-md-5">
+                            <label class="form-label small fw-semibold mb-1 text-secondary">Nama Peran</label>
+                            <input type="text" class="form-control form-control-sm" id="role-input-name-${winEl.id}" placeholder="Contoh: Manager Operasional" required>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label small fw-semibold mb-1 text-secondary">Slug Identifier</label>
+                            <input type="text" class="form-control form-control-sm font-monospace" id="role-input-slug-${winEl.id}" placeholder="contoh: manager-operasional">
+                            <div class="form-text text-muted" style="font-size: 10px;">Otomatis dibuat jika dikosongkan.</div>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label class="form-label small fw-semibold mb-1 text-secondary">Tingkat Otoritas (Level)</label>
+                            <select class="form-select form-select-sm" id="role-input-level-${winEl.id}" required>
+                                <option value="1">Level 1 - User</option>
+                                <option value="2">Level 2 - Admin</option>
+                                <option value="3">Level 3 - Superadmin</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold mb-1 text-secondary">Deskripsi Peran</label>
+                            <input type="text" class="form-control form-control-sm" id="role-input-desc-${winEl.id}" placeholder="Deskripsi wewenang peran ini dalam sistem...">
+                        </div>
+                    </div>
+
+                    <!-- Hak Akses Menu & Modul Navigasi -->
+                    <div class="border rounded p-2 bg-white mb-2" id="role-permissions-section-${winEl.id}">
+                        <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom">
+                            <div>
+                                <span class="small fw-bold text-dark"><i class="fa-solid fa-shield-halved text-primary me-1"></i> Hak Akses Menu & Navigasi</span>
+                                <span class="badge bg-secondary-subtle text-secondary ms-1" id="role-selected-menus-count-${winEl.id}">0 dipilih</span>
+                            </div>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-primary btn-xs py-0 px-2" id="btn-select-all-menus-${winEl.id}" style="font-size: 11px;">Pilih Semua</button>
+                                <button type="button" class="btn btn-outline-secondary btn-xs py-0 px-2" id="btn-deselect-all-menus-${winEl.id}" style="font-size: 11px;">Kosongkan</button>
+                            </div>
+                        </div>
+                        <div id="role-menus-tree-${winEl.id}" class="row g-2 overflow-auto" style="max-height: 180px;">
+                            <div class="col-12 text-center py-2 text-muted small">Memuat daftar menu...</div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-close-role-form-${winEl.id}">Batal</button>
+                        <button type="submit" class="btn btn-sm btn-primary px-3" id="btn-submit-role-${winEl.id}">
+                            <i class="fa-solid fa-floppy-disk me-1"></i> Simpan
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 4. Area Tabel Peran -->
+            <div class="flex-grow-1 overflow-auto bg-white position-relative">
+                <table class="table table-hover table-striped mb-0 align-middle" style="font-size: 13px;">
+                    <thead class="table-light sticky-top border-bottom" style="z-index: 2;">
+                        <tr>
+                            <th class="py-2 px-3" style="width: 50px;">#</th>
+                            <th class="py-2 px-3">Nama Peran & Deskripsi</th>
+                            <th class="py-2 px-3" style="width: 140px;">Slug</th>
+                            <th class="py-2 px-3 text-center" style="width: 80px;">Level</th>
+                            <th class="py-2 px-3 text-center" style="width: 90px;">Pengguna</th>
+                            <th class="py-2 px-3 text-center" style="width: 110px;">Hak Akses</th>
+                            <th class="py-2 px-3 text-end" style="width: 120px;">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="role-tbody-${winEl.id}">
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-muted">
+                                <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                                Memuat data peran dari server...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 5. Footer Bar Status Modul -->
+            <div class="py-1 px-3 bg-light border-top d-flex justify-content-between align-items-center text-muted flex-shrink-0" style="font-size: 11px;">
+                <span>Modul Master Data Peran &bull; Terhubung ke <code>/admin/roles</code></span>
+                <span id="role-status-bar-${winEl.id}">Otorisasi: Admin</span>
+            </div>
+        `;
+
+        // Cache state data pada window element
+        winEl._roleState = {
+            roles: [],
+            menus: [],
+            filter: '',
+            authorized_level: 1,
+            authorized_role: ''
+        };
+
+        const alertContainer = body.querySelector(`#role-alert-${winEl.id}`);
+        const countBadge = body.querySelector(`#role-count-badge-${winEl.id}`);
+        const tbody = body.querySelector(`#role-tbody-${winEl.id}`);
+        const searchInput = body.querySelector(`#role-search-input-${winEl.id}`);
+        const formPanel = body.querySelector(`#role-form-panel-${winEl.id}`);
+        const formTitle = body.querySelector(`#role-form-title-${winEl.id}`);
+        const roleForm = body.querySelector(`#role-form-${winEl.id}`);
+        const inputId = body.querySelector(`#role-form-id-${winEl.id}`);
+        const inputName = body.querySelector(`#role-input-name-${winEl.id}`);
+        const inputSlug = body.querySelector(`#role-input-slug-${winEl.id}`);
+        const inputLevel = body.querySelector(`#role-input-level-${winEl.id}`);
+        const inputDesc = body.querySelector(`#role-input-desc-${winEl.id}`);
+        const menusTreeContainer = body.querySelector(`#role-menus-tree-${winEl.id}`);
+        const selectedCountBadge = body.querySelector(`#role-selected-menus-count-${winEl.id}`);
+        const btnAdd = body.querySelector(`#btn-add-role-${winEl.id}`);
+        const btnRefresh = body.querySelector(`#btn-refresh-role-${winEl.id}`);
+        const btnCancel = body.querySelector(`#btn-cancel-role-${winEl.id}`);
+        const btnCloseForm = body.querySelector(`#btn-close-role-form-${winEl.id}`);
+        const btnSelectAll = body.querySelector(`#btn-select-all-menus-${winEl.id}`);
+        const btnDeselectAll = body.querySelector(`#btn-deselect-all-menus-${winEl.id}`);
+        const statusBar = body.querySelector(`#role-status-bar-${winEl.id}`);
+        const permissionsSection = body.querySelector(`#role-permissions-section-${winEl.id}`);
+
+        const showAlert = (message, type = 'success') => {
+            if (!alertContainer) return;
+            alertContainer.innerHTML = `
+                <div class="alert alert-${type} alert-dismissible fade show py-2 px-3 small mb-2 d-flex align-items-center justify-content-between" role="alert">
+                    <div>
+                        <i class="fa-solid ${type === 'success' ? 'fa-circle-check text-success' : 'fa-triangle-exclamation text-danger'} me-2"></i>
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close py-2" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `;
+            alertContainer.classList.remove('d-none');
+            setTimeout(() => {
+                alertContainer.classList.add('d-none');
+            }, 4000);
+        };
+
+        const updateSelectedCount = () => {
+            if (!menusTreeContainer || !selectedCountBadge) return;
+            const totalChecked = menusTreeContainer.querySelectorAll(`.role-menu-chk-${winEl.id}:checked`).length;
+            selectedCountBadge.textContent = `${totalChecked} dipilih`;
+        };
+
+        const renderMenuCheckboxes = (selectedMenuIds = []) => {
+            if (!menusTreeContainer) return;
+
+            const menus = winEl._roleState.menus || [];
+            if (menus.length === 0) {
+                menusTreeContainer.innerHTML = '<div class="col-12 text-center py-2 text-muted small">Tidak ada data menu tersedia.</div>';
+                updateSelectedCount();
+                return;
+            }
+
+            const roots = menus.filter(m => m.parent_id === null || m.parent_id === 0);
+
+            menusTreeContainer.innerHTML = roots.map(root => {
+                const children = menus.filter(m => m.parent_id === root.id);
+                const isRootChecked = selectedMenuIds.includes(root.id);
+
+                if (children.length > 0) {
+                    return `
+                        <div class="col-12 col-md-6 mb-1">
+                            <div class="p-2 border rounded bg-light-subtle h-100">
+                                <div class="form-check fw-semibold mb-1">
+                                    <input class="form-check-input role-menu-chk-${winEl.id}" type="checkbox" value="${root.id}" id="chk-m-${winEl.id}-${root.id}" data-parent-node="true" ${isRootChecked ? 'checked' : ''}>
+                                    <label class="form-check-label small" for="chk-m-${winEl.id}-${root.id}">
+                                        <i class="${root.icon || 'fa-solid fa-folder'} me-1 text-primary"></i> ${root.title}
+                                    </label>
+                                </div>
+                                <div class="ms-3 ps-2 border-start">
+                                    ${children.map(child => {
+                                        const isChildChecked = selectedMenuIds.includes(child.id);
+                                        return `
+                                            <div class="form-check my-1">
+                                                <input class="form-check-input role-menu-chk-${winEl.id}" type="checkbox" value="${child.id}" id="chk-m-${winEl.id}-${child.id}" data-parent-id="${root.id}" ${isChildChecked ? 'checked' : ''}>
+                                                <label class="form-check-label small text-secondary" for="chk-m-${winEl.id}-${child.id}">
+                                                    <i class="${child.icon || 'fa-regular fa-circle'} me-1 small"></i> ${child.title}
+                                                </label>
+                                            </div>
+                                        `;
+                                    }).join('')}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="col-12 col-md-6 mb-1">
+                        <div class="p-2 border rounded bg-light-subtle h-100">
+                            <div class="form-check">
+                                <input class="form-check-input role-menu-chk-${winEl.id}" type="checkbox" value="${root.id}" id="chk-m-${winEl.id}-${root.id}" ${isRootChecked ? 'checked' : ''}>
+                                <label class="form-check-label small" for="chk-m-${winEl.id}-${root.id}">
+                                    <i class="${root.icon || 'fa-solid fa-circle-notch'} me-1 text-primary"></i> ${root.title}
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Pasang event bubbling / auto-toggle parent-child
+            menusTreeContainer.querySelectorAll(`.role-menu-chk-${winEl.id}`).forEach(chk => {
+                chk.addEventListener('change', (e) => {
+                    const isParentNode = chk.getAttribute('data-parent-node') === 'true';
+                    const parentId = chk.getAttribute('data-parent-id');
+
+                    if (isParentNode) {
+                        // Jika parent dicentang/dilepas, sesuaikan semua anaknya
+                        const childBoxes = menusTreeContainer.querySelectorAll(`input[data-parent-id="${chk.value}"]`);
+                        childBoxes.forEach(cb => {
+                            cb.checked = chk.checked;
+                        });
+                    } else if (parentId && chk.checked) {
+                        // Jika anak dicentang, pastikan parent juga tercentang agar navigasi dapat diakses
+                        const parentBox = menusTreeContainer.querySelector(`#chk-m-${winEl.id}-${parentId}`);
+                        if (parentBox) parentBox.checked = true;
+                    }
+
+                    updateSelectedCount();
+                });
+            });
+
+            updateSelectedCount();
+        };
+
+        const renderTable = () => {
+            const query = (winEl._roleState.filter || '').trim().toLowerCase();
+            const filtered = winEl._roleState.roles.filter(r => {
+                if (!query) return true;
+                return (r.name && r.name.toLowerCase().includes(query)) ||
+                       (r.slug && r.slug.toLowerCase().includes(query)) ||
+                       (r.description && r.description.toLowerCase().includes(query));
+            });
+
+            if (countBadge) {
+                countBadge.textContent = `${filtered.length} dari ${winEl._roleState.roles.length} Peran`;
+            }
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-muted">
+                            <i class="fa-regular fa-folder-open d-block mb-1 fs-4 text-secondary"></i>
+                            ${query ? 'Tidak ada peran yang cocok dengan pencarian.' : 'Belum ada data peran.'}
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(r => {
+                let badgeClass = 'bg-secondary-subtle text-secondary border border-secondary-subtle';
+                if (r.slug === 'superadmin' || r.level >= 3) {
+                    badgeClass = 'bg-danger-subtle text-danger border border-danger-subtle';
+                } else if (r.slug === 'admin' || r.level === 2) {
+                    badgeClass = 'bg-primary-subtle text-primary border border-primary-subtle';
+                }
+
+                const isSuperAdmin = (r.slug === 'superadmin');
+                const hasUsers = (r.user_count > 0);
+                const canDelete = !isSuperAdmin && !hasUsers;
+
+                return `
+                    <tr data-role-id="${r.id}">
+                        <td class="px-3 text-muted small">${r.id}</td>
+                        <td class="px-3">
+                            <div class="fw-semibold text-dark">${r.name}</div>
+                            ${r.description ? `<div class="text-muted small text-truncate" style="max-width: 260px;">${r.description}</div>` : ''}
+                        </td>
+                        <td class="px-3 text-muted">
+                            <code>${r.slug}</code>
+                        </td>
+                        <td class="px-3 text-center">
+                            <span class="badge ${badgeClass}" style="font-size: 10px;">Level ${r.level}</span>
+                        </td>
+                        <td class="px-3 text-center">
+                            <span class="badge bg-light text-dark border" style="font-size: 11px;">
+                                <i class="fa-solid fa-users me-1 text-muted"></i>${r.user_count ?? 0}
+                            </span>
+                        </td>
+                        <td class="px-3 text-center">
+                            <span class="badge bg-info-subtle text-info border border-info-subtle" style="font-size: 11px;">
+                                <i class="fa-solid fa-key me-1"></i>${r.menu_ids ? r.menu_ids.length : 0} Menu
+                            </span>
+                        </td>
+                        <td class="px-3 text-end">
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-light btn-edit-role text-primary" data-role-id="${r.id}" title="Edit Data Peran">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
+                                <button type="button" class="btn btn-light btn-perms-role text-success" data-role-id="${r.id}" title="Kelola Hak Akses Menu">
+                                    <i class="fa-solid fa-shield-halved"></i>
+                                </button>
+                                <button type="button" class="btn btn-light btn-delete-role text-danger ${!canDelete ? 'disabled opacity-50' : ''}" data-role-id="${r.id}" ${!canDelete ? `disabled title="${isSuperAdmin ? 'Superadmin diproteksi' : 'Masih digunakan oleh pengguna'}"` : 'title="Hapus Peran"'}>
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Handler tombol Edit
+            tbody.querySelectorAll('.btn-edit-role').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const roleId = parseInt(btn.getAttribute('data-role-id'), 10);
+                    const role = winEl._roleState.roles.find(r => r.id === roleId);
+                    if (!role) return;
+
+                    formTitle.textContent = `Edit Peran #${role.id} - ${role.name}`;
+                    inputId.value = role.id;
+                    inputName.value = role.name;
+                    inputSlug.value = role.slug;
+                    inputLevel.value = role.level;
+                    inputDesc.value = role.description || '';
+
+                    // Jika superadmin, proteksi slug dan level
+                    if (role.slug === 'superadmin') {
+                        inputSlug.disabled = true;
+                        inputLevel.disabled = true;
+                    } else {
+                        inputSlug.disabled = false;
+                        inputLevel.disabled = false;
+                    }
+
+                    renderMenuCheckboxes(role.menu_ids || []);
+                    formPanel.classList.remove('d-none');
+                    inputName.focus();
+                });
+            });
+
+            // Handler tombol Hak Akses
+            tbody.querySelectorAll('.btn-perms-role').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const roleId = parseInt(btn.getAttribute('data-role-id'), 10);
+                    const role = winEl._roleState.roles.find(r => r.id === roleId);
+                    if (!role) return;
+
+                    formTitle.textContent = `Hak Akses Menu: ${role.name} (${role.slug})`;
+                    inputId.value = role.id;
+                    inputName.value = role.name;
+                    inputSlug.value = role.slug;
+                    inputLevel.value = role.level;
+                    inputDesc.value = role.description || '';
+
+                    if (role.slug === 'superadmin') {
+                        inputSlug.disabled = true;
+                        inputLevel.disabled = true;
+                    } else {
+                        inputSlug.disabled = false;
+                        inputLevel.disabled = false;
+                    }
+
+                    renderMenuCheckboxes(role.menu_ids || []);
+                    formPanel.classList.remove('d-none');
+
+                    // Highlight and scroll to permissions section
+                    if (permissionsSection) {
+                        permissionsSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
+                });
+            });
+
+            // Handler tombol Hapus
+            tbody.querySelectorAll('.btn-delete-role').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const roleId = parseInt(btn.getAttribute('data-role-id'), 10);
+                    const role = winEl._roleState.roles.find(r => r.id === roleId);
+                    if (!role) return;
+
+                    if (role.slug === 'superadmin') {
+                        showAlert('Peran Super Administrator diproteksi dan tidak dapat dihapus.', 'danger');
+                        return;
+                    }
+
+                    if (role.user_count > 0) {
+                        showAlert(`Peran "${role.name}" masih digunakan oleh ${role.user_count} pengguna dan tidak dapat dihapus.`, 'danger');
+                        return;
+                    }
+
+                    const confirmed = confirm(`Apakah Anda yakin ingin menghapus peran "${role.name}"? Tindakan ini tidak dapat dibatalkan.`);
+                    if (!confirmed) return;
+
+                    try {
+                        let result = null;
+                        if (window.SyntaxCore && typeof window.SyntaxCore.api === 'function') {
+                            result = await window.SyntaxCore.api(`/admin/roles/${roleId}`, { method: 'DELETE' });
+                        } else {
+                            const res = await fetch(`/admin/roles/${roleId}`, {
+                                method: 'DELETE',
+                                headers: {
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': this.getCsrfToken()
+                                }
+                            });
+                            result = await res.json();
+                            if (!res.ok) throw new Error(result?.message || 'Gagal menghapus peran');
+                        }
+
+                        showAlert(result?.message || 'Peran berhasil dihapus', 'success');
+                        document.dispatchEvent(new CustomEvent('syntaxcore:roles-updated', { detail: { action: 'delete', roleId } }));
+                        fetchData();
+                    } catch (err) {
+                        showAlert(err.message || 'Terjadi kesalahan saat menghapus peran', 'danger');
+                    }
+                });
+            });
+        };
+
+        const fetchData = async () => {
+            if (countBadge) countBadge.textContent = 'Memuat...';
+            try {
+                let data = null;
+                if (window.SyntaxCore && typeof window.SyntaxCore.api === 'function') {
+                    data = await window.SyntaxCore.api('/admin/roles');
+                } else {
+                    const res = await fetch('/admin/roles', {
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    });
+                    data = await res.json();
+                }
+
+                if (data && data.status === 'success') {
+                    winEl._roleState.roles = Array.isArray(data.roles) ? data.roles : [];
+                    winEl._roleState.menus = Array.isArray(data.menus) ? data.menus : [];
+                    winEl._roleState.authorized_level = data.authorized_level || 1;
+                    winEl._roleState.authorized_role = data.authorized_role || '';
+
+                    // Sesuaikan dropdown level sesuai otorisasi
+                    if (inputLevel && winEl._roleState.authorized_level < 3) {
+                        const optSuper = inputLevel.querySelector('option[value="3"]');
+                        if (optSuper) optSuper.disabled = true;
+                    }
+
+                    if (statusBar && data.authorized_role) {
+                        statusBar.innerHTML = `Otorisasi: <strong class="text-uppercase text-primary">${data.authorized_role}</strong> (Level ${data.authorized_level || 1}) &bull; Total: <strong>${winEl._roleState.roles.length} Peran</strong>`;
+                    }
+
+                    renderTable();
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-danger">Gagal memuat data peran: ${data?.message || 'Unknown error'}</td></tr>`;
+                }
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-danger">Gagal menghubungi server: ${err.message}</td></tr>`;
+            }
+        };
+
+        // Event listener toolbar
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                winEl._roleState.filter = e.target.value;
+                renderTable();
+            });
+        }
+
+        if (btnRefresh) {
+            btnRefresh.addEventListener('click', () => {
+                fetchData();
+            });
+        }
+
+        if (btnAdd) {
+            btnAdd.addEventListener('click', () => {
+                formTitle.textContent = 'Tambah Peran Baru';
+                inputId.value = '';
+                inputName.value = '';
+                inputSlug.value = '';
+                inputSlug.disabled = false;
+                inputLevel.value = '1';
+                inputLevel.disabled = false;
+                inputDesc.value = '';
+
+                renderMenuCheckboxes([]);
+                formPanel.classList.remove('d-none');
+                inputName.focus();
+            });
+        }
+
+        const hideForm = () => {
+            formPanel.classList.add('d-none');
+            roleForm.reset();
+            inputSlug.disabled = false;
+            inputLevel.disabled = false;
+        };
+
+        if (btnCancel) btnCancel.addEventListener('click', hideForm);
+        if (btnCloseForm) btnCloseForm.addEventListener('click', hideForm);
+
+        // Tombol Pilih Semua & Kosongkan Hak Akses Menu
+        if (btnSelectAll) {
+            btnSelectAll.addEventListener('click', () => {
+                menusTreeContainer.querySelectorAll(`.role-menu-chk-${winEl.id}`).forEach(chk => {
+                    chk.checked = true;
+                });
+                updateSelectedCount();
+            });
+        }
+
+        if (btnDeselectAll) {
+            btnDeselectAll.addEventListener('click', () => {
+                menusTreeContainer.querySelectorAll(`.role-menu-chk-${winEl.id}`).forEach(chk => {
+                    chk.checked = false;
+                });
+                updateSelectedCount();
+            });
+        }
+
+        // Submit form (Create / Update Peran & Hak Akses)
+        if (roleForm) {
+            roleForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const roleId = inputId.value ? parseInt(inputId.value, 10) : null;
+                const name = inputName.value.trim();
+                const slug = inputSlug.value.trim();
+                const level = parseInt(inputLevel.value, 10) || 1;
+                const description = inputDesc.value.trim();
+
+                if (!name) {
+                    showAlert('Nama peran wajib diisi', 'danger');
+                    return;
+                }
+
+                // Ambil semua ID menu yang dicentang
+                const checkedMenuIds = Array.from(menusTreeContainer.querySelectorAll(`.role-menu-chk-${winEl.id}:checked`))
+                    .map(cb => parseInt(cb.value, 10));
+
+                const payload = {
+                    name,
+                    slug,
+                    level,
+                    description,
+                    menu_ids: checkedMenuIds
+                };
+
+                const submitBtn = body.querySelector(`#btn-submit-role-${winEl.id}`);
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Menyimpan...';
+                }
+
+                try {
+                    const url = roleId ? `/admin/roles/${roleId}` : '/admin/roles';
+                    const method = roleId ? 'PUT' : 'POST';
+
+                    let result = null;
+                    if (window.SyntaxCore && typeof window.SyntaxCore.api === 'function') {
+                        result = await window.SyntaxCore.api(url, { method, body: payload });
+                    } else {
+                        const res = await fetch(url, {
+                            method: method,
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': this.getCsrfToken()
+                            },
+                            body: JSON.stringify(payload)
+                        });
+                        result = await res.json();
+                        if (!res.ok) throw new Error(result?.message || 'Gagal menyimpan data');
+                    }
+
+                    showAlert(result?.message || (roleId ? 'Data peran berhasil diperbarui' : 'Peran baru berhasil ditambahkan'), 'success');
+                    hideForm();
+                    document.dispatchEvent(new CustomEvent('syntaxcore:roles-updated', { detail: { action: roleId ? 'update' : 'create', roleId, result } }));
+                    fetchData();
+                } catch (err) {
+                    showAlert(err.message || 'Terjadi kesalahan saat menyimpan peran', 'danger');
+                } finally {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<i class="fa-solid fa-floppy-disk me-1"></i> Simpan';
+                    }
+                }
+            });
+        }
+
+        // Ambil data pertama kali saat window dibuka
+        fetchData();
+    }
 
     /**
      * Helper untuk mengambil CSRF token dari meta tag

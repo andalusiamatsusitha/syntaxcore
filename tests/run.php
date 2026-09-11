@@ -808,5 +808,107 @@ $t->test('RBAC middleware enforces role restrictions (403 for unauthorized, 200 
     $auth->logout();
 });
 
+$t->test('Role and Menu Permission Management CRUD & Safety Architecture', function ($t) use ($baseDir) {
+    /** @var \Core\Application\Application $app */
+    $app = require $baseDir . '/bootstrap/app.php';
+    $kernel = $app->make(\Core\Application\Kernel::class);
+    $auth = $app->make(\App\Services\AuthService::class);
+
+    // Login as Superadmin
+    $auth->attempt('admin@syntaxcore.com', 'admin123');
+
+    // 1. GET /admin/roles
+    $getReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/admin/roles',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $getRes = $kernel->handle($getReq);
+    $t->assertEquals(200, $getRes->getStatusCode());
+    $getData = json_decode($getRes->getContent(), true);
+    $t->assertEquals('success', $getData['status'] ?? null);
+    $t->assert(isset($getData['roles']) && count($getData['roles']) >= 3);
+    $t->assert(isset($getData['menus']) && count($getData['menus']) >= 10);
+
+    // 2. POST /admin/roles (Create new test role)
+    $token = \Core\Security\Csrf::token();
+
+    $postReq = new \Core\Http\Request([], [
+        '_token' => $token,
+        'name' => 'Unit Tester Role',
+        'slug' => 'unit-tester-role',
+        'level' => 1,
+        'description' => 'Temporary test role',
+        'menu_ids' => [1, 2, 6],
+    ], [
+        'REQUEST_METHOD' => 'POST',
+        'REQUEST_URI' => '/admin/roles',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $postRes = $kernel->handle($postReq);
+    $t->assertEquals(201, $postRes->getStatusCode());
+    $postData = json_decode($postRes->getContent(), true);
+    $t->assertEquals('success', $postData['status'] ?? null);
+    $testRoleId = $postData['role']['id'] ?? null;
+    $t->assert($testRoleId !== null);
+    $t->assertEquals(3, count($postData['role']['menu_ids']));
+
+    // 3. PUT /admin/roles/{id} (Update test role & sync menu permissions)
+    $putReq = new \Core\Http\Request([], [
+        '_token' => $token,
+        'name' => 'Unit Tester Senior Role',
+        'slug' => 'unit-tester-senior',
+        'level' => 2,
+        'description' => 'Updated temporary test role',
+        'menu_ids' => [1, 2, 4, 6],
+    ], [
+        'REQUEST_METHOD' => 'PUT',
+        'REQUEST_URI' => "/admin/roles/{$testRoleId}",
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $putRes = $kernel->handle($putReq);
+    $t->assertEquals(200, $putRes->getStatusCode());
+    $putData = json_decode($putRes->getContent(), true);
+    $t->assertEquals('success', $putData['status'] ?? null);
+    $t->assertEquals('Unit Tester Senior Role', $putData['role']['name']);
+    $t->assertEquals(4, count($putData['role']['menu_ids']));
+
+    // 4. Safety: Superadmin deletion is rejected with 422
+    $delSuperReq = new \Core\Http\Request([], [
+        '_token' => $token,
+    ], [
+        'REQUEST_METHOD' => 'DELETE',
+        'REQUEST_URI' => '/admin/roles/1',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $delSuperRes = $kernel->handle($delSuperReq);
+    $t->assertEquals(422, $delSuperRes->getStatusCode());
+
+    // 5. Safety: Role in use deletion is rejected with 422
+    $delInUseReq = new \Core\Http\Request([], [
+        '_token' => $token,
+    ], [
+        'REQUEST_METHOD' => 'DELETE',
+        'REQUEST_URI' => '/admin/roles/3',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $delInUseRes = $kernel->handle($delInUseReq);
+    $t->assertEquals(422, $delInUseRes->getStatusCode());
+
+    // 6. DELETE /admin/roles/{id} (Delete temporary test role)
+    $delReq = new \Core\Http\Request([], [
+        '_token' => $token,
+    ], [
+        'REQUEST_METHOD' => 'DELETE',
+        'REQUEST_URI' => "/admin/roles/{$testRoleId}",
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $delRes = $kernel->handle($delReq);
+    $t->assertEquals(200, $delRes->getStatusCode());
+
+    $auth->logout();
+});
+
 // Print final summary
 exit($t->summary());
+

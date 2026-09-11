@@ -23,6 +23,13 @@ $router->group(['middleware' => 'csrf'], function (Router $router) {
         // Routes accessible by: admin and superadmin (Level 2+)
         $router->group(['middleware' => 'role:admin,superadmin'], function (Router $router) {
             $router->get('/users', [DashboardController::class, 'users']);
+            $router->post('/users', [DashboardController::class, 'storeUser']);
+            $router->put('/users/{id}', [DashboardController::class, 'updateUser']);
+            $router->delete('/users/{id}', [DashboardController::class, 'deleteUser']);
+            $router->get('/roles', [DashboardController::class, 'roles']);
+            $router->post('/roles', [DashboardController::class, 'storeRole']);
+            $router->put('/roles/{id}', [DashboardController::class, 'updateRole']);
+            $router->delete('/roles/{id}', [DashboardController::class, 'deleteRole']);
             $router->get('/reports', [DashboardController::class, 'reports']);
         });
 

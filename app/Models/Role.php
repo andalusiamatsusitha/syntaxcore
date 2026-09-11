@@ -42,4 +42,49 @@ class Role extends Model
             return $menu;
         }, $rows);
     }
+
+    /**
+     * Ambil array ID menu yang terkait dengan role ini.
+     */
+    public function menuIds(): array
+    {
+        $sql = "SELECT menu_id FROM `role_menu` WHERE `role_id` = ?";
+        $rows = \Core\Database\Connection::select($sql, [$this->id], $this->connection);
+        return array_map(fn($row) => (int) $row['menu_id'], $rows);
+    }
+
+    /**
+     * Hitung jumlah pengguna yang terikat dengan role ini.
+     */
+    public function userCount(): int
+    {
+        $row = \Core\Database\Connection::selectOne(
+            "SELECT COUNT(*) as cnt FROM `users` WHERE `role_id` = ?",
+            [$this->id],
+            $this->connection
+        );
+        return (int) ($row['cnt'] ?? 0);
+    }
+
+    /**
+     * Sinkronisasi izin menu untuk role ini di tabel pivot role_menu.
+     */
+    public function syncMenus(array $menuIds): void
+    {
+        \Core\Database\Connection::statement(
+            "DELETE FROM `role_menu` WHERE `role_id` = ?",
+            [$this->id],
+            $this->connection
+        );
+
+        $cleanIds = array_unique(array_filter(array_map('intval', $menuIds), fn($id) => $id > 0));
+        foreach ($cleanIds as $mId) {
+            \Core\Database\Connection::statement(
+                "INSERT INTO `role_menu` (`role_id`, `menu_id`) VALUES (?, ?)",
+                [$this->id, $mId],
+                $this->connection
+            );
+        }
+    }
 }
+

@@ -58,5 +58,5 @@ const SyntaxCore = {
 };
 
 if (typeof window !== 'undefined') {
-    window.SyntaxCore = SyntaxCore;
+    window.SyntaxCore = Object.assign(window.SyntaxCore || {}, SyntaxCore);
 }
