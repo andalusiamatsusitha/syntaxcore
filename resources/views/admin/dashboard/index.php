@@ -8,15 +8,18 @@
     <title>Admin Dashboard - SyntaxCore</title>
     <!-- Bootstrap CSS -->
     <link rel="stylesheet" href="/assets/vendor/bootstrap/css/bootstrap.min.css">
+    <!-- Font Awesome Free 6 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
     <!-- App CSS -->
     <link rel="stylesheet" href="/assets/css/app.css">
+    <link rel="stylesheet" href="/assets/css/window.css">
 </head>
 
-<body style="margin: 0; height: 100vh; overflow: hidden;">
+<body style="height: 100vh; overflow: hidden;">
     <!-- Logged in user: <?= htmlspecialchars($user?->name ?? 'Admin') ?> -->
     
     <!-- Div yang menampung semua konten dinamis (header, body/workspace, dan footer) -->
-    <div id="wd-content" style="height: 100%; width: 100%;">
+    <div id="wd-content" class="h-100 w-100">
         <!-- Konten akan dirender secara dinamis oleh JavaScript WindowCore -->
         <noscript>
             <div class="p-4 text-center">
@@ -24,7 +27,7 @@
                 <p>Silakan aktifkan JavaScript di browser Anda untuk membuka dashboard.</p>
             </div>
         </noscript>
-    </div>
+    </div>    
 
     <!-- Hidden CSRF token element -->
     <div style="display: none;"><?= csrf_field() ?></div>
@@ -41,7 +44,8 @@
         document.addEventListener('DOMContentLoaded', function () {
             window.adminApp = new Core("init", {
                 userName: "<?= htmlspecialchars($user?->name ?? 'Administrator') ?>",
-                userEmail: "<?= htmlspecialchars($user?->email ?? '') ?>"
+                userEmail: "<?= htmlspecialchars($user?->email ?? '') ?>",
+                menus: <?= json_encode($menus ?? []) ?>
             });
         });
     </script>

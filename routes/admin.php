@@ -17,6 +17,7 @@ $router->group(['middleware' => 'csrf'], function (Router $router) {
     // Protected admin routes (accessible only by authenticated admins)
     $router->group(['middleware' => 'auth'], function (Router $router) {
         $router->get('/', [DashboardController::class, 'index']);
+        $router->get('/api/menus', [DashboardController::class, 'menus']);
         $router->post('/logout', [AuthController::class, 'logout']);
     });
 });
