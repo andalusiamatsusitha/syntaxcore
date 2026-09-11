@@ -133,6 +133,19 @@ class DashboardController extends Controller
         $user->setPassword($password);
         $user->save();
 
+        \App\Services\ActivityLogger::log(
+            'user.create',
+            "Menambahkan pengguna baru: {$user->name} ({$user->email})",
+            $this->auth->id(),
+            $request
+        );
+        $roleTitle = $user->role()?->name ?? 'User';
+        \App\Services\ActivityLogger::notify(
+            'Pengguna Baru Dibuat',
+            "Akun pengguna {$user->name} ({$roleTitle}) berhasil ditambahkan ke sistem.",
+            'success'
+        );
+
         return $this->json([
             'status' => 'success',
             'message' => 'Pengguna berhasil ditambahkan.',
@@ -199,6 +212,13 @@ class DashboardController extends Controller
 
         $user->save();
 
+        \App\Services\ActivityLogger::log(
+            'user.update',
+            "Memperbarui data pengguna: {$user->name} ({$user->email})",
+            $this->auth->id(),
+            $request
+        );
+
         return $this->json([
             'status' => 'success',
             'message' => 'Data pengguna berhasil diperbarui.',
@@ -235,7 +255,21 @@ class DashboardController extends Controller
             ], 422);
         }
 
+        $userName = $user->name;
+        $userEmail = $user->email;
         $user->delete();
+
+        \App\Services\ActivityLogger::log(
+            'user.delete',
+            "Menghapus pengguna: {$userName} ({$userEmail})",
+            $this->auth->id(),
+            $request
+        );
+        \App\Services\ActivityLogger::notify(
+            'Pengguna Dihapus',
+            "Akun pengguna {$userName} telah dihapus dari sistem.",
+            'warning'
+        );
 
         return $this->json([
             'status' => 'success',
@@ -357,6 +391,18 @@ class DashboardController extends Controller
         // Sync hak akses menu jika ada
         $role->syncMenus($menuIds);
 
+        \App\Services\ActivityLogger::log(
+            'role.create',
+            "Menambahkan peran baru: {$role->name} ({$role->slug}, Level {$role->level})",
+            $this->auth->id(),
+            $request
+        );
+        \App\Services\ActivityLogger::notify(
+            'Peran Baru Ditambahkan',
+            "Peran {$role->name} berhasil dibuat dengan akses ke " . count($role->menuIds()) . " menu.",
+            'success'
+        );
+
         return $this->json([
             'status' => 'success',
             'message' => 'Peran baru berhasil ditambahkan.',
@@ -458,6 +504,13 @@ class DashboardController extends Controller
             $role->syncMenus($menuIds);
         }
 
+        \App\Services\ActivityLogger::log(
+            'role.update',
+            "Memperbarui data peran & hak akses: {$role->name} (#{$role->id})",
+            $this->auth->id(),
+            $request
+        );
+
         return $this->json([
             'status' => 'success',
             'message' => 'Data peran berhasil diperbarui.',
@@ -515,7 +568,20 @@ class DashboardController extends Controller
         // Hapus relasi hak akses menu di role_menu
         \Core\Database\Connection::statement("DELETE FROM `role_menu` WHERE `role_id` = ?", [$id]);
 
+        $roleName = $role->name;
         $role->delete();
+
+        \App\Services\ActivityLogger::log(
+            'role.delete',
+            "Menghapus peran: {$roleName} (#{$id})",
+            $this->auth->id(),
+            $request
+        );
+        \App\Services\ActivityLogger::notify(
+            'Peran Dihapus',
+            "Peran {$roleName} telah dihapus dari sistem.",
+            'warning'
+        );
 
         return $this->json([
             'status' => 'success',
@@ -528,12 +594,150 @@ class DashboardController extends Controller
      */
     public function reports(Request $request): Response
     {
+        $actionFilter = trim((string) $request->input('action', ''));
+        $searchQuery = trim((string) $request->input('q', ''));
+
+        $sql = "SELECT al.*, u.name as user_name, u.email as user_email, r.name as role_name 
+                FROM `activity_logs` al 
+                LEFT JOIN `users` u ON al.user_id = u.id 
+                LEFT JOIN `roles` r ON u.role_id = r.id 
+                WHERE 1=1";
+        $bindings = [];
+
+        if (!empty($actionFilter)) {
+            $sql .= " AND al.action LIKE ?";
+            $bindings[] = "{$actionFilter}%";
+        }
+
+        if (!empty($searchQuery)) {
+            $sql .= " AND (al.description LIKE ? OR u.name LIKE ? OR u.email LIKE ? OR al.ip_address LIKE ?)";
+            $bindings[] = "%{$searchQuery}%";
+            $bindings[] = "%{$searchQuery}%";
+            $bindings[] = "%{$searchQuery}%";
+            $bindings[] = "%{$searchQuery}%";
+        }
+
+        $sql .= " ORDER BY al.id DESC LIMIT 100";
+        $rows = \Core\Database\Connection::select($sql, $bindings);
+
+        $todayCount = (int) (\Core\Database\Connection::selectOne(
+            "SELECT COUNT(*) as cnt FROM `activity_logs` WHERE DATE(created_at) = CURDATE()"
+        )['cnt'] ?? 0);
+
+        $totalCount = (int) (\Core\Database\Connection::selectOne(
+            "SELECT COUNT(*) as cnt FROM `activity_logs`"
+        )['cnt'] ?? 0);
+
+        $logs = array_map(function ($row) {
+            return [
+                'id' => (int) $row['id'],
+                'user_id' => $row['user_id'] ? (int) $row['user_id'] : null,
+                'user_name' => $row['user_name'] ?? 'Sistem / Guest',
+                'user_email' => $row['user_email'] ?? '-',
+                'role_name' => $row['role_name'] ?? '-',
+                'action' => $row['action'],
+                'description' => $row['description'],
+                'ip_address' => $row['ip_address'] ?? '127.0.0.1',
+                'user_agent' => $row['user_agent'] ?? '-',
+                'created_at' => $row['created_at'],
+            ];
+        }, $rows);
+
         return $this->json([
             'status' => 'success',
             'module' => 'Laporan Aktivitas',
             'authorized_role' => $this->auth->user()?->roleSlug(),
+            'total' => $totalCount,
+            'today_count' => $todayCount,
+            'filtered_count' => count($logs),
+            'logs' => $logs,
             'generated_at' => date('Y-m-d H:i:s'),
             'summary' => 'Ringkasan aktivitas sistem dan log transaksi pengguna.',
+        ]);
+    }
+
+    /**
+     * Endpoint Ambil Notifikasi Pengguna (GET /admin/notifications)
+     */
+    public function notifications(Request $request): Response
+    {
+        $userId = $this->auth->id();
+
+        $sql = "SELECT * FROM `notifications` 
+                WHERE user_id IS NULL OR user_id = ? 
+                ORDER BY id DESC LIMIT 30";
+        $rows = \Core\Database\Connection::select($sql, [$userId]);
+
+        $unreadSql = "SELECT COUNT(*) as cnt FROM `notifications` 
+                      WHERE (user_id IS NULL OR user_id = ?) AND is_read = 0";
+        $unreadCount = (int) (\Core\Database\Connection::selectOne($unreadSql, [$userId])['cnt'] ?? 0);
+
+        $notifications = array_map(function ($n) {
+            return [
+                'id' => (int) $n['id'],
+                'user_id' => $n['user_id'] ? (int) $n['user_id'] : null,
+                'title' => $n['title'],
+                'message' => $n['message'],
+                'type' => $n['type'] ?? 'info',
+                'is_read' => (bool) $n['is_read'],
+                'created_at' => $n['created_at'],
+            ];
+        }, $rows);
+
+        return $this->json([
+            'status' => 'success',
+            'unread_count' => $unreadCount,
+            'total' => count($notifications),
+            'notifications' => $notifications,
+        ]);
+    }
+
+    /**
+     * Tandai Notifikasi Telah Dibaca (POST /admin/notifications/{id}/read)
+     */
+    public function markNotificationRead(Request $request): Response
+    {
+        $id = (int) $request->param('id');
+        $userId = $this->auth->id();
+
+        $notif = \App\Models\Notification::find($id);
+        if (!$notif) {
+            return $this->json([
+                'status' => 'error',
+                'message' => 'Notifikasi tidak ditemukan.',
+            ], 404);
+        }
+
+        if ($notif->user_id !== null && (int)$notif->user_id !== (int)$userId) {
+            return $this->json([
+                'status' => 'error',
+                'message' => 'Akses ditolak.',
+            ], 403);
+        }
+
+        $notif->markAsRead();
+
+        return $this->json([
+            'status' => 'success',
+            'message' => 'Notifikasi ditandai telah dibaca.',
+        ]);
+    }
+
+    /**
+     * Tandai Semua Notifikasi Telah Dibaca (POST /admin/notifications/read-all)
+     */
+    public function markAllNotificationsRead(Request $request): Response
+    {
+        $userId = $this->auth->id();
+
+        \Core\Database\Connection::statement(
+            "UPDATE `notifications` SET `is_read` = 1 WHERE `user_id` IS NULL OR `user_id` = ?",
+            [$userId]
+        );
+
+        return $this->json([
+            'status' => 'success',
+            'message' => 'Semua notifikasi ditandai telah dibaca.',
         ]);
     }
 

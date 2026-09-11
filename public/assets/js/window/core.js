@@ -96,8 +96,31 @@ class WindowCore {
                             </span>
                         </div>
 
-                        <!-- Sisi Kanan: Username, Role, dan Tombol Logout Teks -->
-                        <div class="d-flex align-items-center gap-2 small">
+                        <!-- Sisi Kanan: Notifikasi, Username, Role, dan Tombol Logout Teks -->
+                        <div class="d-flex align-items-center gap-2 small position-relative">
+                            <!-- Bell Notifikasi -->
+                            <div class="position-relative me-1" id="wd-notif-dropdown-wrapper">
+                                <button type="button" id="wd-header-bell" class="btn btn-link text-white-50 text-decoration-none p-0 position-relative" style="font-size: 13px; line-height: 1; transition: color 0.15s ease;" title="Notifikasi Sistem">
+                                    <i class="fa-regular fa-bell"></i>
+                                    <span id="wd-header-notif-badge" class="badge rounded-pill bg-danger position-absolute top-0 start-100 translate-middle d-none" style="font-size: 8px; padding: 2px 4px; line-height: 1;">0</span>
+                                </button>
+
+                                <!-- Floating Notification Tray Dropdown -->
+                                <div id="wd-header-notif-tray" class="d-none card shadow-lg position-absolute end-0 mt-2 border" style="width: 320px; z-index: 10000; top: 100%; border-radius: 8px; background: #ffffff; color: #1e293b;">
+                                    <div class="card-header bg-light py-2 px-3 d-flex justify-content-between align-items-center border-bottom">
+                                        <span class="fw-bold small text-dark"><i class="fa-regular fa-bell text-primary me-1"></i> Notifikasi</span>
+                                        <button type="button" class="btn btn-link text-secondary text-decoration-none p-0" id="btn-mark-all-read" style="font-size: 11px;">
+                                            Tandai dibaca
+                                        </button>
+                                    </div>
+                                    <div id="wd-notif-list" class="list-group list-group-flush overflow-auto" style="max-height: 280px; font-size: 12px;">
+                                        <div class="p-3 text-center text-muted small">Memuat notifikasi...</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <span class="text-white-50 opacity-25">|</span>
+
                             <span class="text-white-50" id="wd-header-user-info">
                                 <span class="text-white fw-medium">${this.options.userName || 'Administrator'}</span>
                                 <span class="text-white-50 ms-1" style="font-size: 11px;">(${this.options.userRole || 'Administrator'})</span>
@@ -113,6 +136,8 @@ class WindowCore {
                 
                 <main id="wd-workspace" class="wd-workspace flex-grow-1 position-relative overflow-hidden">
                     <div id="wd-snap-preview" class="wd-snap-preview d-none"></div>
+                    <!-- Desktop Toast Notification Container -->
+                    <div id="wd-toast-container" class="position-fixed bottom-0 end-0 p-3" style="z-index: 10050; pointer-events: none; max-width: 360px;"></div>
                 </main>
 
                 ${(this.options.footer.active) ? `
@@ -140,6 +165,9 @@ class WindowCore {
 
         // Jalankan jam header realtime
         this.startHeaderClock();
+
+        // Inisialisasi sistem notifikasi header
+        this.initNotificationSystem();
 
         // Pasang event tombol teks logout
         const btnLogout = document.getElementById('wd-header-logout');
@@ -548,11 +576,12 @@ class WindowCore {
         winEl.setAttribute('data-action', item.action || '');
         winEl.setAttribute('data-route', item.route || '');
 
-        // Deteksi apakah ini modul Master Pengguna atau Data Peran (Roles)
+        // Deteksi apakah ini modul Master Pengguna, Data Peran (Roles), atau Laporan Aktivitas
         const isUsersModule = (item.action === 'open_users') || (item.route === '/admin/users');
         const isRolesModule = (item.action === 'open_roles') || (item.route === '/admin/roles');
-        const defaultWidth = isUsersModule ? 780 : (isRolesModule ? 840 : 440);
-        const defaultHeight = isUsersModule ? 520 : (isRolesModule ? 560 : 250);
+        const isReportsModule = (item.action === 'open_reports') || (item.route === '/admin/reports');
+        const defaultWidth = isUsersModule ? 780 : (isRolesModule ? 840 : (isReportsModule ? 860 : 440));
+        const defaultHeight = isUsersModule ? 520 : (isRolesModule ? 560 : (isReportsModule ? 540 : 250));
 
         // Posisi default bertingkat (cascade offset)
         const offset = (this.state.windows.length % 6) * 24 + 30;
@@ -652,11 +681,13 @@ class WindowCore {
         // Tambahkan icon window ke toolbar footer di samping tombol menu
         this.addTaskbarItem(winId, item, winEl);
 
-        // Jika modul Manajemen Pengguna atau Peran, render antarmuka masing-masing
+        // Jika modul Manajemen Pengguna, Peran, atau Laporan Aktivitas, render antarmuka masing-masing
         if (isUsersModule) {
             this.renderUserManagement(winEl);
         } else if (isRolesModule) {
             this.renderRoleManagement(winEl);
+        } else if (isReportsModule) {
+            this.renderActivityReports(winEl);
         }
 
         // Trigger custom event agar desain UI atau endpoint loader dapat di-hook oleh user
@@ -2413,6 +2444,441 @@ class WindowCore {
         }
 
         // Ambil data pertama kali saat window dibuka
+        fetchData();
+    }
+
+    /**
+     * Inisialisasi sistem notifikasi header (bell icon, dropdown tray, unread badge, & polling)
+     */
+    initNotificationSystem() {
+        const bellBtn = document.getElementById('wd-header-bell');
+        const tray = document.getElementById('wd-header-notif-tray');
+        const badge = document.getElementById('wd-header-notif-badge');
+        const listContainer = document.getElementById('wd-notif-list');
+        const btnMarkAll = document.getElementById('btn-mark-all-read');
+
+        if (!bellBtn || !tray) return;
+
+        let notificationsCache = [];
+
+        const fetchNotifications = async (silent = true) => {
+            try {
+                let data = null;
+                if (window.SyntaxCore && typeof window.SyntaxCore.api === 'function') {
+                    data = await window.SyntaxCore.api('/admin/notifications');
+                } else {
+                    const res = await fetch('/admin/notifications', {
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    data = await res.json();
+                }
+
+                if (data && data.status === 'success') {
+                    notificationsCache = Array.isArray(data.notifications) ? data.notifications : [];
+                    const unreadCount = data.unread_count || 0;
+
+                    if (badge) {
+                        if (unreadCount > 0) {
+                            badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                            badge.classList.remove('d-none');
+                        } else {
+                            badge.classList.add('d-none');
+                        }
+                    }
+
+                    renderNotifList();
+                }
+            } catch (err) {
+                console.warn('[WindowCore] Gagal mengambil notifikasi:', err);
+            }
+        };
+
+        const renderNotifList = () => {
+            if (!listContainer) return;
+
+            if (notificationsCache.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="p-4 text-center text-muted small">
+                        <i class="fa-regular fa-bell-slash d-block mb-1 fs-4 text-secondary opacity-50"></i>
+                        Tidak ada notifikasi baru.
+                    </div>
+                `;
+                return;
+            }
+
+            const iconMap = {
+                success: 'fa-solid fa-circle-check text-success',
+                warning: 'fa-solid fa-triangle-exclamation text-warning',
+                danger: 'fa-solid fa-circle-exclamation text-danger',
+                info: 'fa-solid fa-circle-info text-primary'
+            };
+
+            listContainer.innerHTML = notificationsCache.map(n => `
+                <div class="list-group-item list-group-item-action py-2 px-3 notif-item ${n.is_read ? 'opacity-75' : 'bg-light-subtle fw-semibold'}" data-notif-id="${n.id}" style="cursor: pointer;">
+                    <div class="d-flex align-items-start gap-2">
+                        <i class="${iconMap[n.type] || iconMap.info} mt-1"></i>
+                        <div class="flex-grow-1 overflow-hidden">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="text-dark small text-truncate ${n.is_read ? '' : 'fw-bold'}">${n.title}</span>
+                                <span class="text-muted font-monospace" style="font-size: 10px;">${(n.created_at || '').split(' ')[1] || ''}</span>
+                            </div>
+                            <div class="text-secondary small fw-normal" style="font-size: 11px; line-height: 1.3;">
+                                ${n.message}
+                            </div>
+                        </div>
+                        ${!n.is_read ? '<span class="badge bg-primary rounded-circle p-1" style="font-size: 5px;" title="Belum dibaca">&bull;</span>' : ''}
+                    </div>
+                </div>
+            `).join('');
+
+            // Pasang event klik item notifikasi untuk tandai dibaca
+            listContainer.querySelectorAll('.notif-item').forEach(item => {
+                item.addEventListener('click', async () => {
+                    const notifId = parseInt(item.getAttribute('data-notif-id'), 10);
+                    const notif = notificationsCache.find(n => n.id === notifId);
+                    if (notif && !notif.is_read) {
+                        notif.is_read = true;
+                        try {
+                            if (window.SyntaxCore && typeof window.SyntaxCore.api === 'function') {
+                                await window.SyntaxCore.api(`/admin/notifications/${notifId}/read`, { method: 'POST' });
+                            } else {
+                                await fetch(`/admin/notifications/${notifId}/read`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Accept': 'application/json',
+                                        'X-CSRF-TOKEN': this.getCsrfToken()
+                                    }
+                                });
+                            }
+                            fetchNotifications();
+                        } catch (e) {
+                            console.warn('[WindowCore] Gagal menandai notifikasi dibaca:', e);
+                        }
+                    }
+                });
+            });
+        };
+
+        // Toggle dropdown saat bell diklik
+        bellBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            tray.classList.toggle('d-none');
+            if (!tray.classList.contains('d-none')) {
+                fetchNotifications();
+            }
+        });
+
+        // Hover effect pada bell
+        bellBtn.addEventListener('mouseenter', () => { bellBtn.style.color = '#ffffff'; });
+        bellBtn.addEventListener('mouseleave', () => { bellBtn.style.color = ''; });
+
+        // Klik di luar untuk menutup tray
+        document.addEventListener('click', (e) => {
+            if (!tray.contains(e.target) && !bellBtn.contains(e.target)) {
+                tray.classList.add('d-none');
+            }
+        });
+
+        // Tombol tandai semua dibaca
+        if (btnMarkAll) {
+            btnMarkAll.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                try {
+                    if (window.SyntaxCore && typeof window.SyntaxCore.api === 'function') {
+                        await window.SyntaxCore.api('/admin/notifications/read-all', { method: 'POST' });
+                    } else {
+                        await fetch('/admin/notifications/read-all', {
+                            method: 'POST',
+                            headers: {
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': this.getCsrfToken()
+                            }
+                        });
+                    }
+                    notificationsCache.forEach(n => n.is_read = true);
+                    if (badge) badge.classList.add('d-none');
+                    renderNotifList();
+                } catch (err) {
+                    console.warn('[WindowCore] Gagal menandai semua notifikasi dibaca:', err);
+                }
+            });
+        }
+
+        // Ambil notifikasi pertama kali
+        fetchNotifications();
+
+        // Polling notifikasi setiap 30 detik
+        if (this._notifInterval) clearInterval(this._notifInterval);
+        this._notifInterval = setInterval(() => fetchNotifications(true), 30000);
+    }
+
+    /**
+     * Menampilkan desktop toast notification yang melayang secara halus di sudut workspace
+     * 
+     * @param {string} title Judul notifikasi
+     * @param {string} message Pesan notifikasi
+     * @param {string} type Tipe notifikasi ('info', 'success', 'warning', 'danger')
+     */
+    showToast(title, message, type = 'info') {
+        let toastContainer = document.getElementById('wd-toast-container');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'wd-toast-container';
+            toastContainer.className = 'position-fixed bottom-0 end-0 p-3';
+            toastContainer.style.cssText = 'z-index: 10050; pointer-events: none; max-width: 380px;';
+            document.body.appendChild(toastContainer);
+        }
+
+        const iconMap = {
+            success: 'fa-solid fa-circle-check text-success',
+            warning: 'fa-solid fa-triangle-exclamation text-warning',
+            danger: 'fa-solid fa-circle-exclamation text-danger',
+            info: 'fa-solid fa-circle-info text-primary'
+        };
+
+        const toastEl = document.createElement('div');
+        toastEl.className = 'card shadow-lg border mb-2 fade show';
+        toastEl.style.cssText = 'pointer-events: auto; border-radius: 8px; font-size: 13px; animation: fadeIn 0.25s ease;';
+        toastEl.innerHTML = `
+            <div class="card-body p-3 d-flex align-items-start gap-2">
+                <i class="${iconMap[type] || iconMap.info} mt-1 fs-6"></i>
+                <div class="flex-grow-1 text-truncate">
+                    <div class="fw-bold text-dark small text-truncate">${title}</div>
+                    <div class="text-secondary small" style="white-space: normal;">${message}</div>
+                </div>
+                <button type="button" class="btn-close btn-sm p-1 ms-1" aria-label="Close"></button>
+            </div>
+        `;
+
+        toastEl.querySelector('.btn-close')?.addEventListener('click', () => {
+            toastEl.remove();
+        });
+
+        toastContainer.appendChild(toastEl);
+
+        setTimeout(() => {
+            if (toastEl.parentNode) {
+                toastEl.classList.remove('show');
+                setTimeout(() => toastEl.remove(), 250);
+            }
+        }, 4500);
+    }
+
+    /**
+     * Merender antarmuka Modul Laporan Aktivitas (Audit Log) di dalam window desktop.
+     * Menampilkan riwayat aksi pengguna, filter kategori, pencarian, dan informasi IP.
+     * 
+     * @param {HTMLElement} winEl Elemen window
+     */
+    renderActivityReports(winEl) {
+        const body = winEl.querySelector('.wd-window-body');
+        if (!body) return;
+
+        body.className = 'wd-window-body card-body p-0 d-flex flex-column h-100 overflow-hidden';
+        body.innerHTML = `
+            <!-- 1. Toolbar Atas Modul Laporan Aktivitas -->
+            <div class="py-2 px-3 bg-light border-bottom d-flex justify-content-between align-items-center gap-2 flex-wrap flex-shrink-0">
+                <div class="d-flex align-items-center gap-2 flex-grow-1" style="max-width: 440px;">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-magnifying-glass"></i></span>
+                        <input type="text" class="form-control border-start-0 ps-0" id="report-search-input-${winEl.id}" placeholder="Cari deskripsi, pengguna, IP..." autocomplete="off">
+                    </div>
+                    <select class="form-select form-select-sm" id="report-action-filter-${winEl.id}" style="max-width: 170px;">
+                        <option value="">Semua Aksi</option>
+                        <option value="auth">Autentikasi</option>
+                        <option value="user">Pengguna</option>
+                        <option value="role">Peran & Akses</option>
+                    </select>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle" id="report-count-badge-${winEl.id}">Memuat...</span>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle d-none d-sm-inline" id="report-today-badge-${winEl.id}">Hari Ini: 0</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-refresh-reports-${winEl.id}" title="Muat Ulang Log">
+                        <i class="fa-solid fa-arrows-rotate"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2. Alert Container -->
+            <div id="report-alert-${winEl.id}" class="d-none px-3 pt-2"></div>
+
+            <!-- 3. Area Tabel Log Aktivitas -->
+            <div class="flex-grow-1 overflow-auto bg-white position-relative">
+                <table class="table table-hover table-striped mb-0 align-middle" style="font-size: 13px;">
+                    <thead class="table-light sticky-top border-bottom" style="z-index: 2;">
+                        <tr>
+                            <th class="py-2 px-3" style="width: 50px;">#</th>
+                            <th class="py-2 px-3" style="width: 150px;">Waktu Kejadian</th>
+                            <th class="py-2 px-3" style="width: 150px;">Pengguna</th>
+                            <th class="py-2 px-3" style="width: 130px;">Aksi</th>
+                            <th class="py-2 px-3">Rincian Aktivitas</th>
+                            <th class="py-2 px-3 text-end" style="width: 130px;">Alamat IP</th>
+                        </tr>
+                    </thead>
+                    <tbody id="report-tbody-${winEl.id}">
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-muted">
+                                <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                                Memuat data laporan aktivitas dari server...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 4. Footer Bar Status Modul -->
+            <div class="py-1 px-3 bg-light border-top d-flex justify-content-between align-items-center text-muted flex-shrink-0" style="font-size: 11px;">
+                <span>Modul Laporan Aktivitas &bull; Terhubung ke <code>/admin/reports</code></span>
+                <span id="report-status-bar-${winEl.id}">Otorisasi: Admin</span>
+            </div>
+        `;
+
+        winEl._reportState = {
+            logs: [],
+            total: 0,
+            todayCount: 0,
+            searchQuery: '',
+            actionFilter: ''
+        };
+
+        const countBadge = body.querySelector(`#report-count-badge-${winEl.id}`);
+        const todayBadge = body.querySelector(`#report-today-badge-${winEl.id}`);
+        const tbody = body.querySelector(`#report-tbody-${winEl.id}`);
+        const searchInput = body.querySelector(`#report-search-input-${winEl.id}`);
+        const actionSelect = body.querySelector(`#report-action-filter-${winEl.id}`);
+        const btnRefresh = body.querySelector(`#btn-refresh-reports-${winEl.id}`);
+        const statusBar = body.querySelector(`#report-status-bar-${winEl.id}`);
+
+        const getActionBadge = (action) => {
+            if (action.startsWith('auth.login')) {
+                return '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fa-solid fa-right-to-bracket me-1"></i>auth.login</span>';
+            } else if (action.startsWith('auth.logout')) {
+                return '<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle"><i class="fa-solid fa-right-from-bracket me-1"></i>auth.logout</span>';
+            } else if (action.startsWith('auth.failed')) {
+                return '<span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="fa-solid fa-triangle-exclamation me-1"></i>auth.failed</span>';
+            } else if (action.startsWith('user.create')) {
+                return '<span class="badge bg-primary-subtle text-primary border border-primary-subtle"><i class="fa-solid fa-user-plus me-1"></i>user.create</span>';
+            } else if (action.startsWith('user.update')) {
+                return '<span class="badge bg-info-subtle text-info border border-info-subtle"><i class="fa-solid fa-user-pen me-1"></i>user.update</span>';
+            } else if (action.startsWith('user.delete')) {
+                return '<span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="fa-solid fa-user-xmark me-1"></i>user.delete</span>';
+            } else if (action.startsWith('role.create')) {
+                return '<span class="badge bg-primary-subtle text-primary border border-primary-subtle"><i class="fa-solid fa-shield me-1"></i>role.create</span>';
+            } else if (action.startsWith('role.update')) {
+                return '<span class="badge bg-info-subtle text-info border border-info-subtle"><i class="fa-solid fa-shield-halved me-1"></i>role.update</span>';
+            } else if (action.startsWith('role.delete')) {
+                return '<span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="fa-solid fa-trash me-1"></i>role.delete</span>';
+            }
+            return `<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">${action}</span>`;
+        };
+
+        const renderTable = () => {
+            const logs = winEl._reportState.logs || [];
+
+            if (countBadge) {
+                countBadge.textContent = `${logs.length} Log Ditampilkan`;
+            }
+            if (todayBadge) {
+                todayBadge.textContent = `Hari Ini: ${winEl._reportState.todayCount}`;
+            }
+
+            if (logs.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center py-4 text-muted">
+                            <i class="fa-regular fa-clipboard d-block mb-1 fs-4 text-secondary"></i>
+                            Tidak ada data log aktivitas yang sesuai.
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = logs.map(log => `
+                <tr>
+                    <td class="px-3 text-muted small">${log.id}</td>
+                    <td class="px-3">
+                        <div class="small font-monospace text-secondary">${log.created_at}</div>
+                    </td>
+                    <td class="px-3">
+                        <div class="fw-semibold text-dark text-truncate" style="max-width: 140px;">${log.user_name}</div>
+                        ${log.user_email && log.user_email !== '-' ? `<div class="text-muted" style="font-size: 11px;"><code>${log.user_email}</code></div>` : ''}
+                    </td>
+                    <td class="px-3">
+                        ${getActionBadge(log.action)}
+                    </td>
+                    <td class="px-3">
+                        <div class="text-dark small">${log.description}</div>
+                    </td>
+                    <td class="px-3 text-end">
+                        <code class="small">${log.ip_address}</code>
+                    </td>
+                </tr>
+            `).join('');
+        };
+
+        const fetchData = async () => {
+            if (countBadge) countBadge.textContent = 'Memuat...';
+            try {
+                const params = new URLSearchParams();
+                if (winEl._reportState.searchQuery) params.append('q', winEl._reportState.searchQuery);
+                if (winEl._reportState.actionFilter) params.append('action', winEl._reportState.actionFilter);
+
+                const queryStr = params.toString() ? `?${params.toString()}` : '';
+                let data = null;
+
+                if (window.SyntaxCore && typeof window.SyntaxCore.api === 'function') {
+                    data = await window.SyntaxCore.api(`/admin/reports${queryStr}`);
+                } else {
+                    const res = await fetch(`/admin/reports${queryStr}`, {
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    data = await res.json();
+                }
+
+                if (data && data.status === 'success') {
+                    winEl._reportState.logs = Array.isArray(data.logs) ? data.logs : [];
+                    winEl._reportState.total = data.total || 0;
+                    winEl._reportState.todayCount = data.today_count || 0;
+
+                    if (statusBar && data.authorized_role) {
+                        statusBar.innerHTML = `Otorisasi: <strong class="text-uppercase text-primary">${data.authorized_role}</strong> &bull; Total Tercatat: <strong>${data.total || 0} Log</strong>`;
+                    }
+
+                    renderTable();
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-danger">Gagal memuat log: ${data?.message || 'Unknown error'}</td></tr>`;
+                }
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-danger">Gagal menghubungi server: ${err.message}</td></tr>`;
+            }
+        };
+
+        let searchTimeout = null;
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    winEl._reportState.searchQuery = e.target.value.trim();
+                    fetchData();
+                }, 300);
+            });
+        }
+
+        if (actionSelect) {
+            actionSelect.addEventListener('change', (e) => {
+                winEl._reportState.actionFilter = e.target.value;
+                fetchData();
+            });
+        }
+
+        if (btnRefresh) {
+            btnRefresh.addEventListener('click', () => {
+                fetchData();
+            });
+        }
+
+        // Muat data saat window dibuka
         fetchData();
     }
 

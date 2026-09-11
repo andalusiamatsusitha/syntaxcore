@@ -38,11 +38,31 @@ class AuthController extends Controller
         }
 
         if (!$this->auth->attempt($email, $password)) {
+            \App\Services\ActivityLogger::log(
+                'auth.failed',
+                "Percobaan login gagal untuk email: {$email}",
+                null,
+                $request
+            );
             return $this->view('admin.auth.login', [
                 'error' => 'Invalid credentials.',
                 'oldEmail' => $email,
             ], 422);
         }
+
+        $user = $this->auth->user();
+        \App\Services\ActivityLogger::log(
+            'auth.login',
+            "Pengguna {$user?->name} ({$user?->email}) berhasil login ke sistem",
+            $user?->id,
+            $request
+        );
+        \App\Services\ActivityLogger::notify(
+            'Sesi Login Berhasil',
+            "Selamat datang kembali, {$user?->name}! Sesi login Anda aktif.",
+            'success',
+            $user?->id
+        );
 
         return $this->redirect('/admin');
     }
@@ -50,8 +70,17 @@ class AuthController extends Controller
     /**
      * Log the admin out and redirect to login.
      */
-    public function logout(): Response
+    public function logout(?Request $request = null): Response
     {
+        $user = $this->auth->user();
+        if ($user) {
+            \App\Services\ActivityLogger::log(
+                'auth.logout',
+                "Pengguna {$user->name} telah keluar dari sistem",
+                $user->id,
+                $request
+            );
+        }
         $this->auth->logout();
         return $this->redirect('/admin/login');
     }

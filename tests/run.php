@@ -909,6 +909,80 @@ $t->test('Role and Menu Permission Management CRUD & Safety Architecture', funct
     $auth->logout();
 });
 
+$t->test('Activity Logging & Notifications Architecture', function ($t) use ($baseDir) {
+    /** @var \Core\Application\Application $app */
+    $app = require $baseDir . '/bootstrap/app.php';
+    $kernel = $app->make(\Core\Application\Kernel::class);
+    $auth = $app->make(\App\Services\AuthService::class);
+
+    // Login as Superadmin
+    $auth->attempt('admin@syntaxcore.com', 'admin123');
+    $token = \Core\Security\Csrf::token();
+
+    // 1. Create test activity log & notification via ActivityLogger
+    $log = \App\Services\ActivityLogger::log('test.system', 'Pengujian otomatis sistem log aktivitas');
+    $t->assert($log->id > 0, 'Activity log must be saved with primary key');
+
+    $notif = \App\Services\ActivityLogger::notify('Test Notifikasi', 'Pesan pengujian sistem notifikasi', 'info');
+    $t->assert($notif->id > 0, 'Notification must be saved with primary key');
+    $t->assertEquals(0, (int) $notif->is_read, 'New notification must be unread by default');
+
+    // 2. GET /admin/reports
+    $getRepReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/admin/reports',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $getRepRes = $kernel->handle($getRepReq);
+    $t->assertEquals(200, $getRepRes->getStatusCode());
+    $repData = json_decode($getRepRes->getContent(), true);
+    $t->assertEquals('success', $repData['status'] ?? null);
+    $t->assert(isset($repData['logs']) && count($repData['logs']) > 0);
+
+    // 3. GET /admin/notifications
+    $getNotifReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/admin/notifications',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $getNotifRes = $kernel->handle($getNotifReq);
+    $t->assertEquals(200, $getNotifRes->getStatusCode());
+    $notifData = json_decode($getNotifRes->getContent(), true);
+    $t->assertEquals('success', $notifData['status'] ?? null);
+    $t->assert($notifData['unread_count'] > 0);
+
+    // 4. POST /admin/notifications/{id}/read
+    $readReq = new \Core\Http\Request([], [
+        '_token' => $token,
+    ], [
+        'REQUEST_METHOD' => 'POST',
+        'REQUEST_URI' => "/admin/notifications/{$notif->id}/read",
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $readRes = $kernel->handle($readReq);
+    $t->assertEquals(200, $readRes->getStatusCode());
+    $readData = json_decode($readRes->getContent(), true);
+    $t->assertEquals('success', $readData['status'] ?? null);
+
+    // 5. POST /admin/notifications/read-all
+    $readAllReq = new \Core\Http\Request([], [
+        '_token' => $token,
+    ], [
+        'REQUEST_METHOD' => 'POST',
+        'REQUEST_URI' => '/admin/notifications/read-all',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $readAllRes = $kernel->handle($readAllReq);
+    $t->assertEquals(200, $readAllRes->getStatusCode());
+
+    // Clean up test records
+    $log->delete();
+    $notif->delete();
+
+    $auth->logout();
+});
+
 // Print final summary
 exit($t->summary());
+
 

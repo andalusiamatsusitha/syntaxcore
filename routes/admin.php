@@ -18,6 +18,9 @@ $router->group(['middleware' => 'csrf'], function (Router $router) {
     $router->group(['middleware' => 'auth'], function (Router $router) {
         $router->get('/', [DashboardController::class, 'index']);
         $router->get('/api/menus', [DashboardController::class, 'menus']);
+        $router->get('/notifications', [DashboardController::class, 'notifications']);
+        $router->post('/notifications/read-all', [DashboardController::class, 'markAllNotificationsRead']);
+        $router->post('/notifications/{id}/read', [DashboardController::class, 'markNotificationRead']);
         $router->post('/logout', [AuthController::class, 'logout']);
 
         // Routes accessible by: admin and superadmin (Level 2+)

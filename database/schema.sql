@@ -46,3 +46,30 @@ CREATE TABLE IF NOT EXISTS `role_menu` (
     CONSTRAINT `fk_role_menu_menu_id` FOREIGN KEY (`menu_id`) REFERENCES `menus` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS `activity_logs` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `user_id` INT NULL,
+    `action` VARCHAR(50) NOT NULL,
+    `description` VARCHAR(255) NOT NULL,
+    `ip_address` VARCHAR(45) NULL,
+    `user_agent` VARCHAR(255) NULL,
+    `created_at` DATETIME NULL,
+    INDEX `idx_activity_logs_action` (`action`),
+    INDEX `idx_activity_logs_created_at` (`created_at`),
+    CONSTRAINT `fk_activity_logs_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `notifications` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `user_id` INT NULL,
+    `title` VARCHAR(150) NOT NULL,
+    `message` TEXT NOT NULL,
+    `type` VARCHAR(20) NOT NULL DEFAULT 'info',
+    `is_read` TINYINT(1) NOT NULL DEFAULT 0,
+    `created_at` DATETIME NULL,
+    INDEX `idx_notifications_user_read` (`user_id`, `is_read`),
+    INDEX `idx_notifications_created_at` (`created_at`),
+    CONSTRAINT `fk_notifications_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
