@@ -66,6 +66,22 @@ services:
     networks:
       - syntaxcore-network
 
+  phpmyadmin:
+    image: phpmyadmin:5.2
+    container_name: syntaxcore-phpmyadmin
+    restart: unless-stopped
+    ports:
+      - "${PMA_PORT:-8081}:80"
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      UPLOAD_LIMIT: 64M
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - syntaxcore-network
+
 networks:
   syntaxcore-network:
     driver: bridge

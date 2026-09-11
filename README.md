@@ -10,6 +10,7 @@ SyntaxCore comes with a fully-configured Docker Compose environment including:
 - **PHP 8.3 FPM** (`app`) with `pdo_mysql`, `opcache`, and Composer pre-installed
 - **Nginx Alpine** (`web`) web server routing all HTTP requests to the front controller
 - **MySQL 8.0** (`db`) database with automatic schema initialization
+- **phpMyAdmin 5.2** (`phpmyadmin`) web-based MySQL database management interface
 
 ### 1. Requirements
 - [Docker](https://docs.docker.com/get-docker/) (20.10+)
@@ -32,6 +33,7 @@ The application will be accessible at:
 - **API Status**: [http://localhost:8080/api/v1/status](http://localhost:8080/api/v1/status)
 - **Admin Panel**: [http://localhost:8080/admin](http://localhost:8080/admin)
 - **Admin Login**: [http://localhost:8080/admin/login](http://localhost:8080/admin/login)
+- **phpMyAdmin Interface**: [http://localhost:8081](http://localhost:8081)
 
 MySQL is accessible on host port `3306` (or `${FORWARD_DB_PORT}`):
 - **Host**: `127.0.0.1` (or `db` from inside containers)
