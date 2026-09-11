@@ -13,6 +13,8 @@
     <!-- App CSS -->
     <link rel="stylesheet" href="/assets/css/app.css">
     <link rel="stylesheet" href="/assets/css/window.css">
+    <!-- TinyMCE 8 Rich Text Editor -->
+    <script src="https://cdn.tiny.cloud/1/7i4wuhyrvzfrtssnvz3vrqtu58t05qxf4u8qaybgpfiek3yz/tinymce/8/tinymce.min.js" referrerpolicy="origin" crossorigin="anonymous"></script>
 </head>
 
 <body style="height: 100vh; overflow: hidden;">

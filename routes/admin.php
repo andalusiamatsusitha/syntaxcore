@@ -1,6 +1,7 @@
 <?php
 
 use App\Controllers\Admin\AuthController;
+use App\Controllers\Admin\CmsController;
 use App\Controllers\Admin\DashboardController;
 use Core\Routing\Router;
 
@@ -38,6 +39,40 @@ $router->group(['middleware' => 'csrf'], function (Router $router) {
             $router->put('/roles/{id}', [DashboardController::class, 'updateRole']);
             $router->delete('/roles/{id}', [DashboardController::class, 'deleteRole']);
             $router->get('/reports', [DashboardController::class, 'reports']);
+
+            // CMS Endpoints
+            $router->get('/cms/categories', [CmsController::class, 'categories']);
+            $router->post('/cms/categories', [CmsController::class, 'storeCategory']);
+            $router->put('/cms/categories/{id}', [CmsController::class, 'updateCategory']);
+            $router->delete('/cms/categories/{id}', [CmsController::class, 'deleteCategory']);
+
+            $router->get('/cms/tags', [CmsController::class, 'tags']);
+            $router->post('/cms/tags', [CmsController::class, 'storeTag']);
+            $router->delete('/cms/tags/{id}', [CmsController::class, 'deleteTag']);
+
+            $router->get('/cms/news', [CmsController::class, 'news']);
+            $router->get('/cms/news/{id}', [CmsController::class, 'showNews']);
+            $router->post('/cms/news', [CmsController::class, 'storeNews']);
+            $router->put('/cms/news/{id}', [CmsController::class, 'updateNews']);
+            $router->delete('/cms/news/{id}', [CmsController::class, 'deleteNews']);
+            $router->post('/cms/news/upload-image', [CmsController::class, 'uploadNewsImage']);
+
+            $router->get('/cms/pages', [CmsController::class, 'pages']);
+            $router->get('/cms/pages/{id}', [CmsController::class, 'showPage']);
+            $router->post('/cms/pages', [CmsController::class, 'storePage']);
+            $router->put('/cms/pages/{id}', [CmsController::class, 'updatePage']);
+            $router->delete('/cms/pages/{id}', [CmsController::class, 'deletePage']);
+
+            $router->get('/cms/comments', [CmsController::class, 'comments']);
+            $router->put('/cms/comments/{id}/status', [CmsController::class, 'updateCommentStatus']);
+            $router->post('/cms/comments/{id}/reply', [CmsController::class, 'replyComment']);
+            $router->delete('/cms/comments/{id}', [CmsController::class, 'deleteComment']);
+
+            $router->get('/cms/menus', [CmsController::class, 'publicMenus']);
+            $router->post('/cms/menus', [CmsController::class, 'storePublicMenu']);
+            $router->put('/cms/menus/{id}', [CmsController::class, 'updatePublicMenu']);
+            $router->delete('/cms/menus/{id}', [CmsController::class, 'deletePublicMenu']);
+            $router->post('/cms/menus/reorder', [CmsController::class, 'reorderPublicMenus']);
         });
 
         // Routes accessible ONLY by: superadmin (Level 3)

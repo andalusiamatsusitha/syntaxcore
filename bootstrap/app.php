@@ -12,11 +12,6 @@ $app->singleton(Kernel::class, function (Application $app) {
     $kernel->loadRoutesUsing(function (Router $router, Application $app) {
         $routesPath = $app->routesPath();
 
-        // Web routes
-        if (file_exists("{$routesPath}/web.php")) {
-            require "{$routesPath}/web.php";
-        }
-
         // Admin routes with '/admin' prefix
         if (file_exists("{$routesPath}/admin.php")) {
             $router->group(['prefix' => 'admin'], function ($router) use ($routesPath) {
@@ -29,6 +24,11 @@ $app->singleton(Kernel::class, function (Application $app) {
             $router->group(['prefix' => 'api'], function ($router) use ($routesPath) {
                 require "{$routesPath}/api.php";
             });
+        }
+
+        // Web routes (catch-all routes like /{slug} registered after specific prefixed routes)
+        if (file_exists("{$routesPath}/web.php")) {
+            require "{$routesPath}/web.php";
         }
     });
 

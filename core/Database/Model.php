@@ -204,7 +204,7 @@ abstract class Model implements JsonSerializable
             if ($result) {
                 $lastId = $pdo->lastInsertId();
                 if ($lastId) {
-                    $this->attributes[$pk] = $lastId;
+                    $this->attributes[$pk] = is_numeric($lastId) ? (int) $lastId : $lastId;
                 }
                 $this->original = $this->attributes;
             }

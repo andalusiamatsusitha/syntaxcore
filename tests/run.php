@@ -1209,6 +1209,574 @@ $t->test('Desktop Wallpaper Upload & Customization Architecture', function ($t) 
     $auth->logout();
 });
 
+// ==========================================
+// 12. CMS MODELS & SCHEMA INTEGRATION
+// ==========================================
+$t->suite('CMS Models & Schema Integration');
+
+$t->test('CMS Categories, Tags, and News Relationship Operations', function ($t) use ($baseDir) {
+    /** @var \Core\Application\Application $app */
+    $app = require $baseDir . '/bootstrap/app.php';
+
+    // 1. Test Category
+    $cat = \App\Models\Category::findBySlug('pengumuman');
+    $t->assert($cat !== null, 'Category pengumuman should exist in database');
+    $t->assertEquals('Pengumuman', $cat->name);
+    $t->assert(is_int($cat->newsCount()), 'newsCount() should return an integer');
+
+    // 2. Test Tag
+    $tag = \App\Models\Tag::firstOrCreateByName('CMS Test Tag');
+    $t->assert($tag !== null, 'Tag should be created or retrieved');
+    $t->assertEquals('cms-test-tag', $tag->slug);
+
+    // 3. Test News
+    $admin = \App\Models\User::findByEmail('admin@syntaxcore.com');
+    $news = \App\Models\News::create([
+        'category_id' => $cat->id,
+        'user_id' => $admin?->id,
+        'title' => 'Test News Item ' . time(),
+        'slug' => 'test-news-item-' . time(),
+        'summary' => 'Test summary',
+        'content' => '<p>Test content body</p>',
+        'status' => 'published',
+        'published_at' => date('Y-m-d H:i:s'),
+        'created_at' => date('Y-m-d H:i:s'),
+        'updated_at' => date('Y-m-d H:i:s'),
+    ]);
+    $t->assert(!empty($news->id), 'News should have an auto-increment ID');
+
+    // Sync tags
+    $news->syncTags([$tag->id]);
+    $newsTags = $news->tags();
+    $t->assertEquals(1, count($newsTags), 'News should have 1 tag attached');
+    $t->assertEquals($tag->name, $newsTags[0]->name);
+
+    // Test author and category relations
+    $t->assertEquals($cat->id, $news->category()?->id);
+    if ($admin) {
+        $t->assertEquals($admin->id, $news->author()?->id);
+    }
+
+    // Test incrementViews
+    $initialViews = (int) $news->views_count;
+    $news->incrementViews();
+    $t->assertEquals($initialViews + 1, (int) $news->views_count);
+
+    // 4. Test Comments
+    $comment = \App\Models\Comment::create([
+        'news_id' => $news->id,
+        'author_name' => 'Reviewer',
+        'author_email' => 'reviewer@example.com',
+        'content' => 'First comment on test article',
+        'status' => 'approved',
+        'created_at' => date('Y-m-d H:i:s'),
+        'updated_at' => date('Y-m-d H:i:s'),
+    ]);
+    $t->assert(!empty($comment->id), 'Comment should have an ID');
+
+    $reply = \App\Models\Comment::create([
+        'news_id' => $news->id,
+        'parent_id' => $comment->id,
+        'author_name' => 'Author Reply',
+        'author_email' => 'author@example.com',
+        'content' => 'Thanks for reading!',
+        'status' => 'approved',
+        'created_at' => date('Y-m-d H:i:s'),
+        'updated_at' => date('Y-m-d H:i:s'),
+    ]);
+    $t->assertEquals($comment->id, $reply->parent()?->id, 'Reply parent should match parent comment');
+    $replies = $comment->replies();
+    $t->assertEquals(1, count($replies), 'Comment should have 1 reply');
+
+    $t->assertEquals(2, $news->approvedCommentsCount(), 'News should have 2 approved comments');
+
+    // Cleanup test news (cascades to comments and news_tag)
+    $news->delete();
+    $tag->delete();
+});
+
+$t->test('CMS Pages and Custom Comment Settings Configuration', function ($t) use ($baseDir) {
+    /** @var \Core\Application\Application $app */
+    $app = require $baseDir . '/bootstrap/app.php';
+
+    $page = \App\Models\Page::findBySlug('baca-berita');
+    $t->assert($page !== null, 'Page baca-berita should exist');
+    $t->assert($page->isNewsSingle(), 'baca-berita should be news_single');
+
+    $settings = $page->getCommentSettings();
+    $t->assert(isset($settings['enabled']), 'Comment settings must have enabled field');
+    $t->assert(isset($settings['style']), 'Comment settings must have style field');
+
+    // Test modification of comment settings
+    $customPage = \App\Models\Page::create([
+        'title' => 'Custom Magazine Reader ' . time(),
+        'slug' => 'magazine-reader-' . time(),
+        'page_type' => 'news_single',
+        'status' => 'published',
+        'created_at' => date('Y-m-d H:i:s'),
+        'updated_at' => date('Y-m-d H:i:s'),
+    ]);
+
+    $customPage->setCommentSettings([
+        'enabled' => true,
+        'style' => 'threaded',
+        'allow_guests' => false,
+        'per_page' => 5,
+    ]);
+    $customPage->save();
+
+    $reloaded = \App\Models\Page::find($customPage->id);
+    $reloadedSettings = $reloaded->getCommentSettings();
+    $t->assertEquals('threaded', $reloadedSettings['style']);
+    $t->assertEquals(false, $reloadedSettings['allow_guests']);
+    $t->assertEquals(5, $reloadedSettings['per_page']);
+
+    $customPage->delete();
+});
+
+$t->test('Public Menus and Hierarchical Tree Navigation', function ($t) use ($baseDir) {
+    /** @var \Core\Application\Application $app */
+    $app = require $baseDir . '/bootstrap/app.php';
+
+    $tree = \App\Models\PublicMenu::tree(true);
+    $t->assert(is_array($tree), 'PublicMenu::tree() should return an array');
+    $t->assert(count($tree) >= 3, 'Tree should have at least 3 root items (Beranda, Berita, Tentang Kami)');
+
+    // Find Berita & Artikel in tree
+    $newsMenu = null;
+    foreach ($tree as $item) {
+        if (str_contains($item['title'], 'Berita')) {
+            $newsMenu = $item;
+            break;
+        }
+    }
+
+    $t->assert($newsMenu !== null, 'Berita root menu should be found in tree');
+    $t->assert(isset($newsMenu['children']), 'Berita menu should have children array');
+    $t->assert(count($newsMenu['children']) >= 2, 'Berita menu should have at least 2 submenus (Teknologi, Pengumuman)');
+    $t->assertEquals('/berita/kategori/teknologi', $newsMenu['children'][0]['computed_url']);
+});
+
+$t->test('Admin CMS Controller Endpoints & RBAC Protection', function ($t) use ($baseDir) {
+    /** @var \Core\Application\Application $app */
+    $app = require $baseDir . '/bootstrap/app.php';
+    $kernel = $app->make(\Core\Application\Kernel::class);
+    $auth = $app->make(\App\Services\AuthService::class);
+    $csrf = $app->make(\Core\Security\Csrf::class);
+    $token = $csrf->token();
+
+    // 1. Regular user gets 403 Forbidden on CMS endpoints
+    $userRole = \App\Models\Role::findBySlug('user');
+    $testEmail = 'regular_cms_tester_' . bin2hex(random_bytes(4)) . '@example.com';
+    $normalUser = \App\Models\User::create([
+        'name' => 'Regular Tester',
+        'email' => $testEmail,
+        'password' => password_hash('secret123', PASSWORD_BCRYPT),
+        'role_id' => $userRole->id,
+        'created_at' => date('Y-m-d H:i:s'),
+        'updated_at' => date('Y-m-d H:i:s'),
+    ]);
+    $auth->login($normalUser);
+
+    $forbiddenReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/admin/cms/news',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $forbiddenRes = $kernel->handle($forbiddenReq);
+    $t->assertEquals(403, $forbiddenRes->getStatusCode(), 'User role should get 403 on /admin/cms/news');
+    $auth->logout();
+
+    // 2. Admin logs in and performs CMS operations
+    $admin = \App\Models\User::findByEmail('admin@syntaxcore.com');
+    $t->assert($admin !== null, 'Admin user must exist');
+    $auth->login($admin);
+    $token = $csrf->token();
+
+    // 2a. GET /admin/cms/categories -> 200
+    $catReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/admin/cms/categories',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $catRes = $kernel->handle($catReq);
+    $t->assertEquals(200, $catRes->getStatusCode());
+    $catData = json_decode($catRes->getContent(), true);
+    $t->assertEquals('success', $catData['status'] ?? null);
+
+    // 2b. POST /admin/cms/categories -> 201
+    $newCatReq = new \Core\Http\Request([], [
+        '_token' => $token,
+        'name' => 'Kategori Uji ' . time(),
+        'color' => '#dc3545',
+        'description' => 'Kategori untuk unit testing',
+    ], [
+        'REQUEST_METHOD' => 'POST',
+        'REQUEST_URI' => '/admin/cms/categories',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $newCatRes = $kernel->handle($newCatReq);
+    $t->assertEquals(201, $newCatRes->getStatusCode());
+    $newCatData = json_decode($newCatRes->getContent(), true);
+    $createdCatId = $newCatData['data']['id'] ?? null;
+    $t->assert(!empty($createdCatId), 'Created category must return ID');
+
+    // 2c. POST /admin/cms/pages -> 201
+    $pageReq = new \Core\Http\Request([], [
+        '_token' => $token,
+        'title' => 'Halaman Uji ' . time(),
+        'slug' => 'halaman-uji-' . time(),
+        'page_type' => 'standard',
+        'content' => '<p>Konten pengujian otomatis</p>',
+        'status' => 'published',
+    ], [
+        'REQUEST_METHOD' => 'POST',
+        'REQUEST_URI' => '/admin/cms/pages',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $pageRes = $kernel->handle($pageReq);
+    $t->assertEquals(201, $pageRes->getStatusCode());
+    $pageData = json_decode($pageRes->getContent(), true);
+    $createdPageId = $pageData['data']['id'] ?? null;
+    $t->assert(!empty($createdPageId), 'Created page must return ID');
+
+    // 2d. POST /admin/cms/news -> 201
+    $newsReq = new \Core\Http\Request([], [
+        '_token' => $token,
+        'title' => 'Berita Uji Integrasi ' . time(),
+        'slug' => 'berita-uji-' . time(),
+        'category_id' => $createdCatId,
+        'summary' => 'Ringkasan berita uji',
+        'content' => '<p>Konten lengkap berita uji</p>',
+        'status' => 'published',
+        'tags' => 'Testing, API, PHP',
+    ], [
+        'REQUEST_METHOD' => 'POST',
+        'REQUEST_URI' => '/admin/cms/news',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $newsRes = $kernel->handle($newsReq);
+    $t->assertEquals(201, $newsRes->getStatusCode());
+    $newsData = json_decode($newsRes->getContent(), true);
+    $createdNewsId = $newsData['data']['id'] ?? null;
+    $t->assert(!empty($createdNewsId), 'Created news must return ID');
+
+    // 2e. GET /admin/cms/news/{id} -> 200
+    $showNewsReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/admin/cms/news/' . $createdNewsId,
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $showNewsRes = $kernel->handle($showNewsReq);
+    $t->assertEquals(200, $showNewsRes->getStatusCode());
+
+    // 2f. GET /admin/cms/menus -> 200
+    $menusReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/admin/cms/menus',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $menusRes = $kernel->handle($menusReq);
+    $t->assertEquals(200, $menusRes->getStatusCode());
+
+    // Cleanup
+    \App\Models\News::find($createdNewsId)?->delete();
+    \App\Models\Page::find($createdPageId)?->delete();
+    \App\Models\Category::find($createdCatId)?->delete();
+    $normalUser->delete();
+
+    $auth->logout();
+});
+
+$t->test('Public CMS Engine Routing, Dynamic Pages, & News Reader', function ($t) use ($baseDir) {
+    /** @var \Core\Application\Application $app */
+    $app = require $baseDir . '/bootstrap/app.php';
+    $kernel = $app->make(\Core\Application\Kernel::class);
+
+    // 1. GET / (Home) -> 200 with dynamic navbar and content
+    $homeReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/',
+    ]);
+    $homeRes = $kernel->handle($homeReq);
+    $t->assertEquals(200, $homeRes->getStatusCode());
+    $t->assertContains('SyntaxCore', $homeRes->getContent());
+    $t->assertContains('Warta & Berita', $homeRes->getContent());
+
+    // 2. GET /tentang-kami (Standard Custom Page) -> 200
+    $aboutReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/tentang-kami',
+    ]);
+    $aboutRes = $kernel->handle($aboutReq);
+    $t->assertEquals(200, $aboutRes->getStatusCode());
+    $t->assertContains('Tentang Kami', $aboutRes->getContent());
+
+    // 3. GET /berita (News Index Feed) -> 200
+    $newsIndexReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/berita',
+    ]);
+    $newsIndexRes = $kernel->handle($newsIndexReq);
+    $t->assertEquals(200, $newsIndexRes->getStatusCode());
+    $t->assertContains('Kategori:', $newsIndexRes->getContent());
+
+    // 4. GET /berita/kategori/teknologi -> 200
+    $catReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/berita/kategori/teknologi',
+    ]);
+    $catRes = $kernel->handle($catReq);
+    $t->assertEquals(200, $catRes->getStatusCode());
+    $t->assertContains('Teknologi', $catRes->getContent());
+
+    // 5. GET /berita/{slug} (News Single Reader) -> 200 & increments views
+    $news = \App\Models\News::getPublishedNews(limit: 1)[0] ?? null;
+    $t->assert($news !== null, 'At least one published news must exist');
+    $initialViews = (int) $news->views_count;
+
+    $singleReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/berita/' . $news->slug,
+    ]);
+    $singleRes = $kernel->handle($singleReq);
+    $t->assertEquals(200, $singleRes->getStatusCode());
+    $t->assertContains($news->title, $singleRes->getContent());
+    $t->assertContains('Diskusi & Komentar', $singleRes->getContent());
+
+    $refreshedNews = \App\Models\News::find($news->id);
+    $t->assertEquals($initialViews + 1, (int) $refreshedNews->views_count, 'Views count must increment upon viewing article');
+
+    // 6. Non-existent slug -> 404
+    $notFoundReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/halaman-fiktif-tidak-ada-999',
+    ]);
+    $notFoundRes = $kernel->handle($notFoundReq);
+    $t->assertEquals(404, $notFoundRes->getStatusCode());
+});
+
+$t->test('Public Comment Submission, Honeypot Anti-Spam, and XSS Sanitization', function ($t) use ($baseDir) {
+    /** @var \Core\Application\Application $app */
+    $app = require $baseDir . '/bootstrap/app.php';
+    $kernel = $app->make(\Core\Application\Kernel::class);
+    $csrf = $app->make(\Core\Security\Csrf::class);
+    $token = $csrf->token();
+
+    $news = \App\Models\News::getPublishedNews(limit: 1)[0] ?? null;
+    $t->assert($news !== null, 'News item must exist for comment testing');
+
+    // 1. POST without CSRF token -> 419
+    $noCsrfReq = new \Core\Http\Request([], [
+        'author_name' => 'Spammer',
+        'author_email' => 'spam@test.com',
+        'content' => 'Spam comment without token',
+    ], [
+        'REQUEST_METHOD' => 'POST',
+        'REQUEST_URI' => "/news/{$news->id}/comments",
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $noCsrfRes = $kernel->handle($noCsrfReq);
+    $t->assertEquals(419, $noCsrfRes->getStatusCode(), 'POST without CSRF must return 419');
+
+    // 2. POST with honeypot spam filled -> 422 rejected
+    $honeypotReq = new \Core\Http\Request([], [
+        '_token' => $token,
+        'website_hp' => 'http://spam-bot-link.com',
+        'author_name' => 'Bot Spammer',
+        'author_email' => 'bot@spam.com',
+        'content' => 'Spam comment with bot',
+    ], [
+        'REQUEST_METHOD' => 'POST',
+        'REQUEST_URI' => "/news/{$news->id}/comments",
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $honeypotRes = $kernel->handle($honeypotReq);
+    $t->assertEquals(422, $honeypotRes->getStatusCode(), 'Honeypot trap must reject spam request');
+
+    // 3. POST with valid data and XSS payload -> 201 created & sanitized
+    $xssPayload = '<script>alert("XSS")</script> Komentar sah dengan <b>format</b>.';
+    $validReq = new \Core\Http\Request([], [
+        '_token' => $token,
+        'website_hp' => '',
+        'author_name' => 'Budi Santoso',
+        'author_email' => 'budi@example.com',
+        'content' => $xssPayload,
+    ], [
+        'REQUEST_METHOD' => 'POST',
+        'REQUEST_URI' => "/news/{$news->id}/comments",
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $validRes = $kernel->handle($validReq);
+    $t->assertEquals(201, $validRes->getStatusCode(), 'Valid comment submission should return 201');
+
+    $commentData = json_decode($validRes->getContent(), true);
+    $createdCommentId = $commentData['data']['id'] ?? null;
+    $t->assert(!empty($createdCommentId), 'Created comment ID must be returned');
+
+    $savedComment = \App\Models\Comment::find($createdCommentId);
+    $t->assert($savedComment !== null, 'Comment must be persisted to database');
+    $t->assert(!str_contains($savedComment->content, '<script>'), 'Script tags must be sanitized via htmlspecialchars');
+    $t->assertContains('&lt;script&gt;', $savedComment->content, 'Raw HTML must be escaped safely');
+
+    // Clean up
+    $savedComment->delete();
+});
+
+$t->test('Comment Moderation Cycle and Admin Direct Reply', function ($t) use ($baseDir) {
+    /** @var \Core\Application\Application $app */
+    $app = require $baseDir . '/bootstrap/app.php';
+    $kernel = $app->make(\Core\Application\Kernel::class);
+    $auth = $app->make(\App\Services\AuthService::class);
+    $csrf = $app->make(\Core\Security\Csrf::class);
+    $token = $csrf->token();
+
+    $news = \App\Models\News::getPublishedNews(limit: 1)[0] ?? null;
+    $t->assert($news !== null);
+
+    // Create a pending comment
+    $pendingComment = \App\Models\Comment::create([
+        'news_id' => $news->id,
+        'author_name' => 'User Tertunda',
+        'author_email' => 'tertunda@example.com',
+        'content' => 'Pertanyaan yang membutuhkan moderasi',
+        'status' => 'pending',
+        'created_at' => date('Y-m-d H:i:s'),
+        'updated_at' => date('Y-m-d H:i:s'),
+    ]);
+
+    // Admin logs in
+    $admin = \App\Models\User::findByEmail('admin@syntaxcore.com');
+    $auth->login($admin);
+    $adminToken = $csrf->token();
+
+    // 1. Admin approves the comment -> PUT /admin/cms/comments/{id}/status
+    $approveReq = new \Core\Http\Request([], [
+        '_token' => $adminToken,
+        'status' => 'approved',
+    ], [
+        'REQUEST_METHOD' => 'PUT',
+        'REQUEST_URI' => "/admin/cms/comments/{$pendingComment->id}/status",
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $approveRes = $kernel->handle($approveReq);
+    $t->assertEquals(200, $approveRes->getStatusCode());
+
+    $updatedComment = \App\Models\Comment::find($pendingComment->id);
+    $t->assertEquals('approved', $updatedComment->status);
+
+    // 2. Admin replies to the comment -> POST /admin/cms/comments/{id}/reply
+    $replyReq = new \Core\Http\Request([], [
+        '_token' => $adminToken,
+        'content' => 'Terima kasih atas pertanyaannya! Jawaban kami telah dikirim.',
+    ], [
+        'REQUEST_METHOD' => 'POST',
+        'REQUEST_URI' => "/admin/cms/comments/{$pendingComment->id}/reply",
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $replyRes = $kernel->handle($replyReq);
+    $t->assertEquals(201, $replyRes->getStatusCode());
+    $replyData = json_decode($replyRes->getContent(), true);
+    $replyCommentId = $replyData['data']['id'] ?? null;
+    $t->assert(!empty($replyCommentId));
+
+    $replyComment = \App\Models\Comment::find($replyCommentId);
+    $t->assertEquals($pendingComment->id, $replyComment->parent_id);
+    $t->assertEquals('approved', $replyComment->status);
+    $t->assertEquals($admin->id, $replyComment->user_id);
+
+    // Clean up
+    $replyComment->delete();
+    $pendingComment->delete();
+    $auth->logout();
+});
+
+$t->test('Page Layout Templates (Full-Width, Sidebar, Blank, Default) & Blueprint Resolution', function ($t) use ($baseDir) {
+    /** @var \Core\Application\Application $app */
+    $app = require $baseDir . '/bootstrap/app.php';
+    $kernel = $app->make(\Core\Application\Kernel::class);
+
+    $auth = $app->make(\App\Services\AuthService::class);
+    $csrf = $app->make(\Core\Security\Csrf::class);
+    $admin = \App\Models\User::findByEmail('admin@syntaxcore.com');
+    $auth->login($admin);
+    $adminToken = $csrf->token();
+
+    // 1. Create page with 'fullwidth' layout via admin API
+    $createReq = new \Core\Http\Request([], [
+        '_token' => $adminToken,
+        'title' => 'Landing Showcase Test',
+        'slug' => 'landing-showcase-test',
+        'page_type' => 'standard',
+        'layout_template' => 'fullwidth',
+        'content' => '<div class="hero-showcase">Banner Penuh Konten</div>',
+        'status' => 'published',
+    ], [
+        'REQUEST_METHOD' => 'POST',
+        'REQUEST_URI' => '/admin/cms/pages',
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $createRes = $kernel->handle($createReq);
+    $t->assertEquals(201, $createRes->getStatusCode());
+    $createdData = json_decode($createRes->getContent(), true)['data'] ?? [];
+    $pageId = (int) ($createdData['id'] ?? 0);
+    $t->assert($pageId > 0);
+
+    $page = \App\Models\Page::find($pageId);
+    $t->assertEquals('fullwidth', $page->getLayoutTemplate());
+
+    // 2. Access public GET /landing-showcase-test -> should render fullwidth view
+    $pubReq = new \Core\Http\Request([], [], [
+        'REQUEST_METHOD' => 'GET',
+        'REQUEST_URI' => '/landing-showcase-test',
+    ]);
+    $pubRes = $kernel->handle($pubReq);
+    $t->assertEquals(200, $pubRes->getStatusCode());
+    $t->assertContains('Banner Penuh Konten', $pubRes->getContent());
+    $t->assertContains('w-100 flex-grow-1', $pubRes->getContent(), 'Fullwidth view must have w-100 container');
+
+    // 3. Update to 'sidebar' layout
+    $updateReq = new \Core\Http\Request([], [
+        '_token' => $adminToken,
+        'title' => 'Documentation Sidebar Test',
+        'layout_template' => 'sidebar',
+        'content' => '<p>Konten dokumentasi dengan navigasi samping</p>',
+    ], [
+        'REQUEST_METHOD' => 'PUT',
+        'REQUEST_URI' => "/admin/cms/pages/{$pageId}",
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $updateRes = $kernel->handle($updateReq);
+    $t->assertEquals(200, $updateRes->getStatusCode());
+
+    // 4. Access public GET /landing-showcase-test -> should render sidebar view
+    $sideRes = $kernel->handle($pubReq);
+    $t->assertEquals(200, $sideRes->getStatusCode());
+    $t->assertContains('Halaman Terkait', $sideRes->getContent(), 'Sidebar view must include Halaman Terkait widget');
+    $t->assertContains('Konten dokumentasi dengan navigasi samping', $sideRes->getContent());
+
+    // 5. Update to 'blank' layout
+    $blankUpdateReq = new \Core\Http\Request([], [
+        '_token' => $adminToken,
+        'layout_template' => 'blank',
+    ], [
+        'REQUEST_METHOD' => 'PUT',
+        'REQUEST_URI' => "/admin/cms/pages/{$pageId}",
+        'HTTP_ACCEPT' => 'application/json',
+    ]);
+    $blankUpdateRes = $kernel->handle($blankUpdateReq);
+    $t->assertEquals(200, $blankUpdateRes->getStatusCode());
+
+    // 6. Access public GET /landing-showcase-test -> should render blank view
+    $blankRes = $kernel->handle($pubReq);
+    $t->assertEquals(200, $blankRes->getStatusCode());
+    $t->assertContains('Minimalist Clean Main Content', $blankRes->getContent());
+
+    // Clean up
+    $page->delete();
+    $auth->logout();
+});
+
 // Print final summary
 exit($t->summary());
 

@@ -346,3 +346,19 @@ div.wd-menu-window {
     border-color: #0d6efd;
     background: #eff6ff;
 }
+
+/* TinyMCE Window Manager Compatibility */
+.tox-tinymce-aux {
+    z-index: 100000 !important;
+}
+.tox .tox-dialog-wrap {
+    z-index: 100001 !important;
+}
+.tox .tox-dialog {
+    border-radius: 8px !important;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25) !important;
+}
+.tox.tox-tinymce {
+    border-radius: 6px !important;
+    border: 1px solid #dee2e6 !important;
+}

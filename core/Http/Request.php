@@ -131,6 +131,12 @@ class Request
         return $all[$key] ?? $default;
     }
 
+    public function has(string $key): bool
+    {
+        $all = $this->all();
+        return array_key_exists($key, $all);
+    }
+
     /**
      * Retrieve an uploaded file or all files.
      */
@@ -140,6 +146,21 @@ class Request
             return $this->files;
         }
         return $this->files[$key] ?? null;
+    }
+
+    public function files(): array
+    {
+        return $this->files;
+    }
+
+    public function ip(): ?string
+    {
+        $forwarded = $this->header('X-Forwarded-For');
+        if ($forwarded) {
+            $parts = explode(',', $forwarded);
+            return trim($parts[0]);
+        }
+        return $this->server['REMOTE_ADDR'] ?? null;
     }
 
     /**
