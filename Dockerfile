@@ -24,12 +24,14 @@ COPY . /var/www/html
 COPY docker/php/php.ini /usr/local/etc/php/conf.d/custom.ini
 COPY docker/php/zz-docker.conf /usr/local/etc/php-fpm.d/zz-docker.conf
 
-# Set permissions for storage
+# Set permissions for storage and public uploads
 RUN mkdir -p /var/www/html/storage/cache \
              /var/www/html/storage/logs \
              /var/www/html/storage/uploads \
-    && chown -R www-data:www-data /var/www/html/storage \
-    && chmod -R 775 /var/www/html/storage
+             /var/www/html/public/uploads/wallpapers \
+             /var/www/html/public/uploads/news \
+    && chown -R www-data:www-data /var/www/html/storage /var/www/html/public/uploads \
+    && chmod -R 775 /var/www/html/storage /var/www/html/public/uploads
 
 # Install dependencies if composer.json exists
 RUN if [ -f composer.json ]; then \

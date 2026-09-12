@@ -8,5 +8,7 @@
 !/storage/uploads/.gitkeep
 /public/uploads/wallpapers/*
 !/public/uploads/wallpapers/.gitkeep
+/public/uploads/news/*
+!/public/uploads/news/.gitkeep
 .phpunit.result.cache
 *.tmp
