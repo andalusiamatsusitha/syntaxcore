@@ -3,10 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/png" href="/favicon.png">
     <title><?= htmlspecialchars($news->title) ?> - PKBM S.Supriadi</title>
     <?php if (!empty($news->summary)): ?>
         <meta name="description" content="<?= htmlspecialchars(strip_tags($news->summary)) ?>">
     <?php endif; ?>
+    <!-- Open Graph (OG) Meta Tags - PKBM S.Supriadi -->
+    <meta property="og:type" content="article">
+    <meta property="og:title" content="<?= htmlspecialchars($news->title) ?> - PKBM S.Supriadi">
+    <meta property="og:description" content="<?= htmlspecialchars(strip_tags($news->summary ?: mb_substr($news->content, 0, 150))) ?>">
+    <meta property="og:image" content="<?= htmlspecialchars($news->featured_image ?: 'https://pkbmsupriadi.sch.id/wp-content/uploads/2026/03/foto_600kb_1-e1772888126743-1200x845.jpg') ?>">
+    <meta property="og:url" content="/berita/<?= htmlspecialchars($news->slug) ?>">
+    <meta property="og:site_name" content="PKBM S.Supriadi">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

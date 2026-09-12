@@ -3,8 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/png" href="/favicon.png">
     <title><?= htmlspecialchars($activeCategory ? 'Kategori: ' . $activeCategory->name : ($activeTag ? 'Tag: #' . $activeTag->name : ($page->meta_title ?: 'Warta & Berita Terkini'))) ?> - PKBM S.Supriadi</title>
-    <!-- Google Fonts -->
+    <!-- Open Graph (OG) Meta Tags - PKBM S.Supriadi -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="<?= htmlspecialchars($activeCategory ? 'Kategori: ' . $activeCategory->name : ($activeTag ? 'Tag: #' . $activeTag->name : ($page->meta_title ?: 'Warta & Berita Terkini'))) ?> - PKBM S.Supriadi">
+    <meta property="og:description" content="Warta, artikel, kegiatan edukatif, dan kabar terkini dari PKBM S.Supriadi Kota Malang.">
+    <meta property="og:image" content="https://pkbmsupriadi.sch.id/wp-content/uploads/2026/03/foto_600kb_1-e1772888126743-1200x845.jpg">
+    <meta property="og:url" content="/berita">
+    <meta property="og:site_name" content="PKBM S.Supriadi">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">

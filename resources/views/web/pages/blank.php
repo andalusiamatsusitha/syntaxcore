@@ -3,10 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($page->meta_title ?: $page->title) ?> - PKBM S.Supriadi</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <?php
+        $pageTitle = $page->meta_title ?: $page->title;
+        if (!str_contains($pageTitle, 'PKBM S.Supriadi')) {
+            $pageTitle .= ' - PKBM S.Supriadi';
+        }
+    ?>
+    <title><?= htmlspecialchars($pageTitle) ?></title>
     <?php if (!empty($page->meta_description)): ?>
         <meta name="description" content="<?= htmlspecialchars($page->meta_description) ?>">
     <?php endif; ?>
+    <!-- Open Graph (OG) Meta Tags - PKBM S.Supriadi -->
+    <meta property="og:type" content="article">
+    <meta property="og:title" content="<?= htmlspecialchars($pageTitle) ?>">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

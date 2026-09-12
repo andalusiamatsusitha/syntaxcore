@@ -3,10 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($page->meta_title ?: $page->title) ?> - PKBM S.Supriadi</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <?php
+        $pageTitle = $page->meta_title ?: $page->title;
+        if (!str_contains($pageTitle, 'PKBM S.Supriadi')) {
+            $pageTitle .= ' - PKBM S.Supriadi';
+        }
+    ?>
+    <title><?= htmlspecialchars($pageTitle) ?></title>
     <?php if (!empty($page->meta_description)): ?>
         <meta name="description" content="<?= htmlspecialchars($page->meta_description) ?>">
     <?php endif; ?>
+    <!-- Open Graph (OG) Meta Tags - PKBM S.Supriadi -->
+    <meta property="og:type" content="article">
+    <meta property="og:title" content="<?= htmlspecialchars($pageTitle) ?>">
+    <meta property="og:description" content="<?= htmlspecialchars($page->meta_description ?: 'Informasi resmi dan profil kegiatan belajar mengajar PKBM S.Supriadi Kota Malang.') ?>">
+    <meta property="og:image" content="https://pkbmsupriadi.sch.id/wp-content/uploads/2026/03/logo1-pkbmsupriadi.sch_.id_.png">
+    <meta property="og:url" content="/page/<?= htmlspecialchars($page->slug) ?>">
+    <meta property="og:site_name" content="PKBM S.Supriadi">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

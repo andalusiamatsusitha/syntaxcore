@@ -125,5 +125,12 @@ Sesuai dengan `pkbmsupriadi.sch.id`, beranda terdiri dari:
   - [x] Migrasi tautan FontAwesome di seluruh template halaman (`standard.php`, `sidebar.php`, `fullwidth.php`, `news_index.php`, `news_single.php`, `blank.php`) ke CDN FontAwesome Free 6
   - [x] Penyertaan Google Fonts Poppins & kelas utilitas sekolah agar tampilan seragam dengan beranda
 
+- [x] **Tahap 8: Implementasi Favicon & Open Graph (og:*) PKBM S. Supriadi**
+  - [x] Pemasangan favicon otentik sekolah (`favicon.ico` dan `favicon.png`) di root direktori publik
+  - [x] Penambahan metadata Open Graph (`og:title`, `og:description`, `og:image`, `og:url`, `og:type`, `og:site_name`) di Beranda (`resources/views/web/home/index.php`)
+  - [x] Penambahan Open Graph dinamis dan favicon di seluruh template halaman dalam (`standard.php`, `sidebar.php`, `fullwidth.php`, `blank.php`, `news_index.php`, `news_single.php`)
+  - [x] Penanganan deduplikasi judul halaman (`- PKBM S.Supriadi`) dan kompatibilitas suite pengujian
+
+
 
 

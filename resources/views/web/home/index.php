@@ -11,9 +11,22 @@ $appName = $appName ?? 'PKBM S.Supriadi';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="application-name" content="<?= htmlspecialchars($appName) ?>">
-    <title><?= htmlspecialchars($appName === 'SyntaxCore' ? 'PKBM S.Supriadi' : $appName) ?> - Website Resmi Sekolah Kesetaraan Kota Malang</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" type="image/png" href="/favicon.png">
+
+    <title><?= htmlspecialchars($appName && $appName !== 'SyntaxCore' ? $appName : 'PKBM S.Supriadi - Website Resmi Sekolah Kesetaraan Kota Malang') ?></title>
+
     <meta name="description" content="Website Resmi PKBM S.Supriadi Malang. Sekolah nonformal kesetaraan Paket A, Paket B, dan Paket C dengan waktu belajar fleksibel dan keterampilan vokasi.">
+
+    <!-- Open Graph (OG) Meta Tags - PKBM S.Supriadi -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="<?= htmlspecialchars($appName && $appName !== 'SyntaxCore' ? $appName : 'PKBM S.Supriadi - Website Resmi Sekolah Kesetaraan Kota Malang') ?>">
+    <meta property="og:description" content="Website Resmi PKBM S.Supriadi Malang. Lembaga pendidikan nonformal kesetaraan Paket A, Paket B, dan Paket C terakreditasi naungan Dinas Pendidikan Kota Malang.">
+    <meta property="og:image" content="https://pkbmsupriadi.sch.id/wp-content/uploads/2026/03/foto_600kb_1-e1772888126743-1200x845.jpg">
+    <meta property="og:url" content="https://pkbmsupriadi.sch.id/">
+    <meta property="og:site_name" content="PKBM S.Supriadi">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
