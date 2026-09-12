@@ -131,6 +131,14 @@ Sesuai dengan `pkbmsupriadi.sch.id`, beranda terdiri dari:
   - [x] Penambahan Open Graph dinamis dan favicon di seluruh template halaman dalam (`standard.php`, `sidebar.php`, `fullwidth.php`, `blank.php`, `news_index.php`, `news_single.php`)
   - [x] Penanganan deduplikasi judul halaman (`- PKBM S.Supriadi`) dan kompatibilitas suite pengujian
 
+- [x] **Tahap 9: Technical SEO Google, Dynamic Sitemap & Konfigurasi Domain Produksi**
+  - [x] Konfigurasi domain produksi resmi: `https://pkbmssupriadi.sch.id/`
+  - [x] Pembuatan `public/robots.txt` dengan crawling allowlist dan tautan sitemap resmi
+  - [x] Implementasi dynamic XML Sitemap generator endpoint `/sitemap.xml` di `CmsPublicController` & `routes/web.php`
+  - [x] Penambahan canonical link tags (`<link rel="canonical">`) di seluruh template halaman
+  - [x] Integrasi Schema.org JSON-LD Structured Data: `School` (`EducationalOrganization`) di beranda dan `NewsArticle` di artikel berita
+
+
 
 
 

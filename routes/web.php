@@ -30,6 +30,10 @@ $router->group(['middleware' => 'csrf'], function (Router $router) {
     $router->post('/news/{id}/comments', [CmsPublicController::class, 'submitComment']);
 });
 
+// SEO XML Sitemap (Dynamic)
+$router->get('/sitemap.xml', [CmsPublicController::class, 'sitemap']);
+
 // Dynamic Catch-All Page Resolvers (supports both /page/{slug} and direct /{slug})
 $router->get('/page/{slug}', [CmsPublicController::class, 'page']);
 $router->get('/{slug}', [CmsPublicController::class, 'page']);
+

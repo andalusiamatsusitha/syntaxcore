@@ -445,4 +445,74 @@ class CmsPublicController extends Controller
         header('Location: /berita/' . $news->slug . '#comments', true, 302);
         exit;
     }
+
+    /**
+     * Generate XML Sitemap untuk Search Engine (Google, Bing)
+     */
+    public function sitemap(Request $request): Response
+    {
+        $baseUrl = 'https://pkbmssupriadi.sch.id';
+        $pages = Page::where('status', '=', 'published');
+        $newsItems = News::where('status', '=', 'published');
+        $categories = Category::all();
+
+        $xml = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+        $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
+
+        // Beranda
+        $xml .= "  <url>\n";
+        $xml .= "    <loc>{$baseUrl}/</loc>\n";
+        $xml .= "    <changefreq>daily</changefreq>\n";
+        $xml .= "    <priority>1.0</priority>\n";
+        $xml .= "  </url>\n";
+
+        // Berita Index
+        $xml .= "  <url>\n";
+        $xml .= "    <loc>{$baseUrl}/berita</loc>\n";
+        $xml .= "    <changefreq>daily</changefreq>\n";
+        $xml .= "    <priority>0.9</priority>\n";
+        $xml .= "  </url>\n";
+
+        // Halaman Statis / Profil
+        foreach ($pages as $p) {
+            if ($p->slug === 'beranda') {
+                continue;
+            }
+            $slug = htmlspecialchars($p->slug, ENT_XML1);
+            $lastmod = !empty($p->updated_at) ? date('Y-m-d', strtotime($p->updated_at)) : date('Y-m-d');
+            $xml .= "  <url>\n";
+            $xml .= "    <loc>{$baseUrl}/page/{$slug}</loc>\n";
+            $xml .= "    <lastmod>{$lastmod}</lastmod>\n";
+            $xml .= "    <changefreq>weekly</changefreq>\n";
+            $xml .= "    <priority>0.8</priority>\n";
+            $xml .= "  </url>\n";
+        }
+
+        // Berita & Pengumuman
+        foreach ($newsItems as $n) {
+            $slug = htmlspecialchars($n->slug, ENT_XML1);
+            $lastmod = !empty($n->updated_at) ? date('Y-m-d', strtotime($n->updated_at)) : date('Y-m-d');
+            $xml .= "  <url>\n";
+            $xml .= "    <loc>{$baseUrl}/berita/{$slug}</loc>\n";
+            $xml .= "    <lastmod>{$lastmod}</lastmod>\n";
+            $xml .= "    <changefreq>monthly</changefreq>\n";
+            $xml .= "    <priority>0.7</priority>\n";
+            $xml .= "  </url>\n";
+        }
+
+        // Kategori Berita
+        foreach ($categories as $c) {
+            $slug = htmlspecialchars($c->slug, ENT_XML1);
+            $xml .= "  <url>\n";
+            $xml .= "    <loc>{$baseUrl}/berita/kategori/{$slug}</loc>\n";
+            $xml .= "    <changefreq>weekly</changefreq>\n";
+            $xml .= "    <priority>0.6</priority>\n";
+            $xml .= "  </url>\n";
+        }
+
+        $xml .= '</urlset>';
+
+        return new Response($xml, 200, ['Content-Type' => 'application/xml; charset=UTF-8']);
+    }
 }
+

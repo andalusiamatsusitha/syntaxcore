@@ -16,9 +16,14 @@
     <?php if (!empty($page->meta_description)): ?>
         <meta name="description" content="<?= htmlspecialchars($page->meta_description) ?>">
     <?php endif; ?>
+    <link rel="canonical" href="https://pkbmssupriadi.sch.id/page/<?= htmlspecialchars($page->slug) ?>">
     <!-- Open Graph (OG) Meta Tags - PKBM S.Supriadi -->
     <meta property="og:type" content="article">
     <meta property="og:title" content="<?= htmlspecialchars($pageTitle) ?>">
+    <meta property="og:description" content="<?= htmlspecialchars($page->meta_description ?: 'Informasi resmi dan profil kegiatan belajar mengajar PKBM S.Supriadi Kota Malang.') ?>">
+    <meta property="og:image" content="https://pkbmsupriadi.sch.id/wp-content/uploads/2026/03/logo1-pkbmsupriadi.sch_.id_.png">
+    <meta property="og:url" content="https://pkbmssupriadi.sch.id/page/<?= htmlspecialchars($page->slug) ?>">
+    <meta property="og:site_name" content="PKBM S.Supriadi">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

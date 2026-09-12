@@ -20,13 +20,45 @@ $appName = $appName ?? 'PKBM S.Supriadi';
 
     <meta name="description" content="Website Resmi PKBM S.Supriadi Malang. Sekolah nonformal kesetaraan Paket A, Paket B, dan Paket C dengan waktu belajar fleksibel dan keterampilan vokasi.">
 
+    <link rel="canonical" href="https://pkbmssupriadi.sch.id/">
+
     <!-- Open Graph (OG) Meta Tags - PKBM S.Supriadi -->
     <meta property="og:type" content="website">
     <meta property="og:title" content="<?= htmlspecialchars($appName && $appName !== 'SyntaxCore' ? $appName : 'PKBM S.Supriadi - Website Resmi Sekolah Kesetaraan Kota Malang') ?>">
     <meta property="og:description" content="Website Resmi PKBM S.Supriadi Malang. Lembaga pendidikan nonformal kesetaraan Paket A, Paket B, dan Paket C terakreditasi naungan Dinas Pendidikan Kota Malang.">
     <meta property="og:image" content="https://pkbmsupriadi.sch.id/wp-content/uploads/2026/03/foto_600kb_1-e1772888126743-1200x845.jpg">
-    <meta property="og:url" content="https://pkbmsupriadi.sch.id/">
+    <meta property="og:url" content="https://pkbmssupriadi.sch.id/">
     <meta property="og:site_name" content="PKBM S.Supriadi">
+
+    <!-- Schema.org JSON-LD Structured Data: School / EducationalOrganization -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "School",
+      "name": "PKBM S. Supriadi",
+      "alternateName": "Pusat Kegiatan Belajar Masyarakat S. Supriadi Kota Malang",
+      "url": "https://pkbmssupriadi.sch.id/",
+      "logo": "https://pkbmsupriadi.sch.id/wp-content/uploads/2026/03/logo1-pkbmsupriadi.sch_.id_.png",
+      "image": "https://pkbmsupriadi.sch.id/wp-content/uploads/2026/03/foto_600kb_1-e1772888126743-1200x845.jpg",
+      "description": "Lembaga pendidikan nonformal kesetaraan Paket A (setara SD), Paket B (setara SMP), dan Paket C (setara SMA) resmi terakreditasi di bawah naungan Dinas Pendidikan Kota Malang.",
+      "telephone": "+6285954447600",
+      "email": "pkbmsupriadi1@gmail.com",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "Jl. S.Supriadi IX No.42 RT.13 RW.04, Kel. Sukun, Kec. Sukun",
+        "addressLocality": "Kota Malang",
+        "addressRegion": "Jawa Timur",
+        "postalCode": "65147",
+        "addressCountry": "ID"
+      },
+      "sameAs": [
+        "https://www.instagram.com/pkbmssupriadi",
+        "https://www.youtube.com/@PKBMSUPRIADI",
+        "https://www.tiktok.com/@pkbmssupriadi"
+      ]
+    }
+    </script>
+
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

@@ -10,13 +10,43 @@
     <?php if (!empty($news->summary)): ?>
         <meta name="description" content="<?= htmlspecialchars(strip_tags($news->summary)) ?>">
     <?php endif; ?>
+    <link rel="canonical" href="https://pkbmssupriadi.sch.id/berita/<?= htmlspecialchars($news->slug) ?>">
     <!-- Open Graph (OG) Meta Tags - PKBM S.Supriadi -->
     <meta property="og:type" content="article">
     <meta property="og:title" content="<?= htmlspecialchars($news->title) ?> - PKBM S.Supriadi">
     <meta property="og:description" content="<?= htmlspecialchars(strip_tags($news->summary ?: mb_substr($news->content, 0, 150))) ?>">
     <meta property="og:image" content="<?= htmlspecialchars($news->featured_image ?: 'https://pkbmsupriadi.sch.id/wp-content/uploads/2026/03/foto_600kb_1-e1772888126743-1200x845.jpg') ?>">
-    <meta property="og:url" content="/berita/<?= htmlspecialchars($news->slug) ?>">
+    <meta property="og:url" content="https://pkbmssupriadi.sch.id/berita/<?= htmlspecialchars($news->slug) ?>">
     <meta property="og:site_name" content="PKBM S.Supriadi">
+
+    <!-- Schema.org JSON-LD: NewsArticle -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "NewsArticle",
+      "headline": <?= json_encode($news->title, JSON_UNESCAPED_UNICODE) ?>,
+      "image": [
+        <?= json_encode($news->featured_image ?: 'https://pkbmsupriadi.sch.id/wp-content/uploads/2026/03/foto_600kb_1-e1772888126743-1200x845.jpg') ?>
+      ],
+      "datePublished": "<?= !empty($news->published_at) ? date('c', strtotime($news->published_at)) : date('c') ?>",
+      "dateModified": "<?= !empty($news->updated_at) ? date('c', strtotime($news->updated_at)) : date('c') ?>",
+      "author": {
+        "@type": "Organization",
+        "name": "PKBM S. Supriadi",
+        "url": "https://pkbmssupriadi.sch.id/"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "PKBM S. Supriadi",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://pkbmsupriadi.sch.id/wp-content/uploads/2026/03/logo1-pkbmsupriadi.sch_.id_.png"
+        }
+      },
+      "description": <?= json_encode(strip_tags($news->summary ?: mb_substr($news->content, 0, 150)), JSON_UNESCAPED_UNICODE) ?>
+    }
+    </script>
+
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
