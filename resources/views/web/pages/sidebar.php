@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($page->meta_title ?: $page->title) ?> - SyntaxCore</title>
+    <title><?= htmlspecialchars($page->meta_title ?: $page->title) ?> - PKBM S.Supriadi</title>
     <?php if (!empty($page->meta_description)): ?>
         <meta name="description" content="<?= htmlspecialchars($page->meta_description) ?>">
     <?php endif; ?>
