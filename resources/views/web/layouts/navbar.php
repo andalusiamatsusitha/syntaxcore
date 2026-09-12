@@ -23,7 +23,7 @@ $activeMenu = $activeMenu ?? '/';
             </div>
             <div class="d-flex align-items-center gap-2">
                 <i class="fa-solid fa-certificate text-success"></i>
-                <span class="badge bg-success-subtle text-success border border-success-subtle">NPSN P9962749 &bull; Terakreditasi</span>
+                NPSN P9962749 <span class="badge bg-success-subtle text-success border border-success-subtle">Terakreditasi</span>
             </div>
         </div>
 
@@ -43,28 +43,45 @@ $activeMenu = $activeMenu ?? '/';
     </div>
 </div>
 
-<!-- Main Navigation Bar -->
-<nav class="navbar navbar-expand-lg navbar-light bg-white sticky-top shadow-sm py-2" style="border-bottom: 3px solid #2db700;">
-    <div class="container">
+<!-- Main Navbar (Brand, Identity, & Header Area) -->
+<nav class="navbar navbar-light bg-white py-2 py-lg-3 border-bottom main-navbar">
+    <div class="container d-flex justify-content-between align-items-center">
         <!-- School Brand Logo -->
-        <a class="navbar-brand d-flex align-items-center gap-2 py-0" href="/">
-            <img src="https://pkbmsupriadi.sch.id/wp-content/uploads/2026/03/logo1-pkbmsupriadi.sch_.id_.png" alt="PKBM S.Supriadi" style="height: 48px;" onerror="this.style.display='none'">
-            <div class="d-flex flex-column">
-                <span class="fw-bold text-dark fs-5 tracking-tight" style="line-height: 1.15;">PKBM <span style="color: #2db700;">S.Supriadi</span></span>
-                <small class="text-muted font-monospace text-uppercase" style="font-size: 10px; letter-spacing: 0.5px;">Pendidikan Kesetaraan Malang</small>
-            </div>
+        <a class="navbar-brand d-flex align-items-center py-0 m-0" href="/">
+            <img src="https://pkbmsupriadi.sch.id/wp-content/uploads/2026/03/logo1-pkbmsupriadi.sch_.id_.png" alt="PKBM S.Supriadi" style="height: 54px; max-height: 60px;">
         </a>
 
-        <!-- Mobile Toggler -->
-        <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#pkbmNavbar" aria-controls="pkbmNavbar" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="navbar-toggler-icon"></span>
-        </button>
+        <!-- PPDB Call-To-Action Button (Desktop) -->
+        <div class="d-none d-lg-flex align-items-center">
+            <a href="/page/ppdb" class="btn text-white rounded-pill px-4 py-2 fw-bold d-inline-flex align-items-center gap-2 shadow-sm" style="background-color: #2db700; border: 2px solid #2db700; font-size: 14.5px; letter-spacing: 0.3px;">
+                <i class="fa-solid fa-graduation-cap fs-5"></i>
+                <span>PPDB 2026</span>
+            </a>
+        </div>
 
-        <!-- Navbar Menu List -->
+        <!-- Mobile Controls: Quick PPDB & Hamburger Toggler -->
+        <div class="d-flex align-items-center gap-2 d-lg-none">
+            <a href="/page/ppdb" class="btn btn-sm text-white rounded-pill px-3 py-1 fw-bold shadow-sm" style="background-color: #2db700; font-size: 12.5px;">
+                <i class="fa-solid fa-graduation-cap me-1"></i>PPDB
+            </a>
+            <button class="navbar-toggler border-0 shadow-none p-1" type="button" data-bs-toggle="collapse" data-bs-target="#pkbmNavbar" aria-controls="pkbmNavbar" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+        </div>
+    </div>
+</nav>
+
+<!-- Second Navbar: Specifically holds div#pkbmNavbar -->
+<nav class="navbar navbar-expand-lg navbar-light bg-white second-navbar shadow-sm sticky-top py-0" style="border-bottom: 3px solid #2db700;">
+    <div class="container">
+        <!-- div#pkbmNavbar as requested -->
         <div class="collapse navbar-collapse" id="pkbmNavbar">
-            <ul class="navbar-nav me-auto mb-2 mb-lg-0 ps-lg-3 gap-lg-1">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0 py-2 py-lg-1 gap-lg-1">
                 <?php foreach ($menus as $m): ?>
                     <?php
+                        if (stripos($m['title'], 'PPDB') !== false) {
+                            continue;
+                        }
                         $hasChildren = !empty($m['children']);
                         $url = $m['computed_url'] ?? '/';
                         $isActive = ($activeMenu === $url) || ($url !== '/' && $url !== '#' && str_starts_with($activeMenu, $url));
@@ -88,14 +105,29 @@ $activeMenu = $activeMenu ?? '/';
                                         $childHasChildren = !empty($child['children']);
                                         $childUrl = $child['computed_url'] ?? '#';
                                     ?>
-                                    <li>
-                                        <a class="dropdown-item py-2 small d-flex justify-content-between align-items-center" href="<?= htmlspecialchars($childUrl) ?>">
-                                            <span><?= htmlspecialchars($child['title']) ?></span>
-                                            <?php if ($childHasChildren): ?>
-                                                <i class="fa-solid fa-chevron-right text-muted" style="font-size: 10px;"></i>
-                                            <?php endif; ?>
-                                        </a>
-                                    </li>
+                                    <?php if ($childHasChildren): ?>
+                                        <li class="dropdown-submenu px-2 py-1">
+                                            <span class="dropdown-header text-uppercase fw-bold text-success px-1 pt-1 pb-1" style="font-size: 11px;">
+                                                <?= htmlspecialchars($child['title']) ?>
+                                            </span>
+                                            <ul class="list-unstyled ps-2 mb-1">
+                                                <?php foreach ($child['children'] as $subChild): ?>
+                                                    <li>
+                                                        <a class="dropdown-item py-1 small rounded-2" href="<?= htmlspecialchars($subChild['computed_url'] ?? '#') ?>">
+                                                            <i class="fa-solid fa-angle-right me-1 text-muted" style="font-size: 9px;"></i>
+                                                            <?= htmlspecialchars($subChild['title']) ?>
+                                                        </a>
+                                                    </li>
+                                                <?php endforeach; ?>
+                                            </ul>
+                                        </li>
+                                    <?php else: ?>
+                                        <li>
+                                            <a class="dropdown-item py-2 small" href="<?= htmlspecialchars($childUrl) ?>">
+                                                <?= htmlspecialchars($child['title']) ?>
+                                            </a>
+                                        </li>
+                                    <?php endif; ?>
                                 <?php endforeach; ?>
                             </ul>
                         </li>
@@ -109,13 +141,10 @@ $activeMenu = $activeMenu ?? '/';
                 <?php endforeach; ?>
             </ul>
 
-            <!-- Right Controls: Search & PPDB 2026 CTA -->
-            <div class="d-flex align-items-center gap-2 pt-2 pt-lg-0">
-                <a href="/berita" class="btn btn-sm btn-outline-secondary rounded-pill px-3 d-none d-xl-inline-flex align-items-center gap-1" style="font-size: 12px;">
-                    <i class="fa-solid fa-magnifying-glass small"></i> Warta & Berita
-                </a>
-                <a href="/page/ppdb" class="btn btn-sm text-white rounded-pill px-3 py-1 fw-semibold d-inline-flex align-items-center gap-1 shadow-sm" style="background-color: #2db700; border-color: #2db700; font-size: 13px;">
-                    <i class="fa-solid fa-graduation-cap"></i> PPDB 2026
+            <!-- Right Controls: Warta & Berita Link -->
+            <div class="d-flex align-items-center gap-2 py-2 py-lg-0">
+                <a href="/berita" class="btn btn-sm btn-outline-secondary rounded-pill px-3 d-none d-xl-inline-flex align-items-center gap-1" style="font-size: 12.5px;">
+                    <i class="fa-solid fa-newspaper small"></i> Warta & Berita
                 </a>
             </div>
         </div>

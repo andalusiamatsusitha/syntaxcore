@@ -11,10 +11,6 @@
             <div class="col-12 col-md-4 col-lg-3">
                 <div class="d-flex align-items-center gap-2 mb-3">
                     <img src="https://pkbmsupriadi.sch.id/wp-content/uploads/2026/03/logo1-pkbmsupriadi.sch_.id_.png" alt="PKBM S.Supriadi" style="height: 48px;" onerror="this.style.display='none'">
-                    <div>
-                        <h5 class="fw-bold mb-0 text-white">PKBM <span style="color: #2db700;">S.Supriadi</span></h5>
-                        <small class="text-white-50" style="font-size: 11px;">Kota Malang</small>
-                    </div>
                 </div>
                 <p class="small text-white-50 mb-3" style="line-height: 1.65;">
                     PKBM S.SUPRIADI Adalah lembaga resmi naungan Dinas Pendidikan Kota Malang dengan NPSN P9962749 dan sudah terakreditasi.

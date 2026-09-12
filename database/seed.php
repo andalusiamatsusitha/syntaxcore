@@ -1185,14 +1185,6 @@ try {
             'sort_order' => 10,
             'children' => [],
         ],
-        [
-            'title' => 'PPDB 2026',
-            'link_type' => 'page',
-            'link_target' => 'ppdb',
-            'url' => '/page/ppdb',
-            'sort_order' => 11,
-            'children' => [],
-        ],
     ];
 
     $seedPublicMenuRecursive = function (array $def, ?int $parentId = null) use (&$seedPublicMenuRecursive, $pdo) {

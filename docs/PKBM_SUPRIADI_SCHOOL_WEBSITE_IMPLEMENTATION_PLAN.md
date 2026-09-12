@@ -53,10 +53,12 @@ Situs mengadopsi navigasi bertingkat persis seperti `pkbmsupriadi.sch.id`:
 
 Sesuai dengan `pkbmsupriadi.sch.id`, beranda terdiri dari:
 1. **Top Contact Bar**:
-   - Informasi telepon, email resmi, dan tautan media sosial (WhatsApp, Instagram `@pkbmssupriadi`, YouTube `@PKBMSUPRIADI`, TikTok `@pkbmssupriadi`).
-2. **Navbar Utama**:
-   - Logo PKBM S.Supriadi, menu navigasi hierarki dinamis, tombol pencarian berita, tombol aksi PPDB 2026, dan akses cepat Admin Desktop.
-3. **Hero Slider (Carousel 4 Slide)**:
+   - Informasi telepon, email resmi, dan tautan media sosial (WhatsApp, Instagram `@pkbmssupriadi`, YouTube `@PKBMSUPRIADI`, TikTok `@pkbmssupriadi`) serta tautan Desktop Admin.
+2. **Main Navbar (Brand & Header Area)**:
+   - Logo resmi PKBM S.Supriadi, nama lembaga, tombol Call-to-Action PPDB 2026 (desktop & mobile), dan tombol toggler navigasi mobile.
+3. **Second Navbar (`nav.second-navbar`)**:
+   - Khusus menampung `div#pkbmNavbar` yang berisi menu navigasi publik bertingkat dan tautan Warta & Berita, berstatus `sticky-top`. Tombol PPDB dialihkan sepenuhnya ke Main Navbar.
+4. **Hero Slider (Carousel 4 Slide)**:
    - Slide 1: *"Belajar dari Lingkungan Sekitar"*
    - Slide 2: *"Semua Berhak Mendapatkan Pendidikan"*
    - Slide 3: *"Pembelajaran Luar Kelas ialah salah satu solusi."*
@@ -99,6 +101,8 @@ Sesuai dengan `pkbmsupriadi.sch.id`, beranda terdiri dari:
 
 - [x] **Tahap 3: Pembaruan Layout & Komponen Publik (`resources/views/web/`)**
   - [x] Desain `navbar.php` dengan Top Contact Bar dan branding hijau PKBM S.Supriadi
+  - [x] Implementasi arsitektur Two-Tier Navbar: Main Navbar (Header/Branding/PPDB) dan Second Navbar (`sticky-top`) khusus menampung `div#pkbmNavbar`
+  - [x] Konfigurasi routing ganda CMS di `routes/web.php` untuk mendukung `/page/{slug}` dan `/{slug}` secara bersamaan
   - [x] Desain `footer.php` dengan identitas resmi PKBM S.Supriadi dan tautan link penting Dapodik / Kemendikdasmen
   - [x] Desain `home/index.php` yang mencakup Hero Slider, Sambutan Kepala Sekolah, Statistik Data Sekolah, Berita Warta, Guru & Tendik, Fasilitas, Intrakurikuler, dan Testimoni
   - [x] Penyesuaian `pages/standard.php`, `sidebar.php`, `fullwidth.php`, `news_index.php`, dan `news_single.php` agar konsisten dengan gaya sekolah

@@ -30,5 +30,6 @@ $router->group(['middleware' => 'csrf'], function (Router $router) {
     $router->post('/news/{id}/comments', [CmsPublicController::class, 'submitComment']);
 });
 
-// Dynamic Catch-All Page Resolver (e.g. /tentang-kami, /kontak, dll.)
+// Dynamic Catch-All Page Resolvers (supports both /page/{slug} and direct /{slug})
+$router->get('/page/{slug}', [CmsPublicController::class, 'page']);
 $router->get('/{slug}', [CmsPublicController::class, 'page']);
