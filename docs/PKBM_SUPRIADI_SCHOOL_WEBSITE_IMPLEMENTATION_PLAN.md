@@ -116,3 +116,9 @@ Sesuai dengan `pkbmsupriadi.sch.id`, beranda terdiri dari:
   - [x] Perbarui status checklist tugas
   - [x] Laporkan hasil implementasi kepada pengguna
 
+- [x] **Tahap 6: Cadangan Database Siap Produksi (Backup & Restore)**
+  - [x] Ekstraksi dump skema 13 tabel dan seluruh dataset otentik PKBM S.Supriadi via `mysqldump`
+  - [x] Penyimpanan file cadangan di `database/backups/latest_production_backup.sql`
+  - [x] Pembuatan panduan restore komprehensif di `database/backups/README.md`
+
+
